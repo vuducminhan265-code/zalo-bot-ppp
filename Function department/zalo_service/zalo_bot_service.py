@@ -3,8 +3,36 @@ import os
 import json
 import time
 import requests
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from datetime import datetime
 from dotenv import load_dotenv
+
+# Lightweight HTTP Health Check Server for Render / Cloud deployments
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html; charset=utf-8')
+        self.end_headers()
+        self.wfile.write(b"Zalo Bot PPP Service is Running 24/7!")
+    def do_HEAD(self):
+        self.send_response(200)
+        self.end_headers()
+    def log_message(self, format, *args):
+        pass
+
+def start_health_server():
+    try:
+        port = int(os.getenv("PORT", "10000"))
+        server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
+        print(f"Health check HTTP server listening on port {port}...", flush=True)
+        server.serve_forever()
+    except Exception as e:
+        print(f"Health server notice: {e}", flush=True)
+
+health_thread = threading.Thread(target=start_health_server, daemon=True)
+health_thread.start()
+
 
 # Redirect stdout/stderr to log file if running windowless (pythonw)
 log_file_path = os.path.join(os.path.dirname(__file__), "bot_service.log")
