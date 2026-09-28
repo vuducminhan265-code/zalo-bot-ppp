@@ -15,14 +15,29 @@ if func_dept_dir not in sys.path:
 
 try:
     from tools.web_search_grounding import WebSearchGrounder
+except Exception as e:
+    print(f"Notice: WebSearchGrounder fallback -> {e}")
+    class WebSearchGrounder:
+        def search(self, query): return ""
+
+try:
     from tools.fetch_workspace_tasks import GoogleWorkspaceTaskFetcher
+except Exception as e:
+    print(f"Notice: GoogleWorkspaceTaskFetcher fallback -> {e}")
+    GoogleWorkspaceTaskFetcher = None
+
+try:
     from rag_engine.rag_pipeline import RAGPipeline
+except Exception as e:
+    print(f"Notice: RAGPipeline fallback -> {e}")
+    RAGPipeline = None
+
+try:
     from ai_core.ai_analyzer import TaskAIAnalyzer
-except ImportError:
-    from ..tools.web_search_grounding import WebSearchGrounder
-    from ..tools.fetch_workspace_tasks import GoogleWorkspaceTaskFetcher
-    from ..rag_engine.rag_pipeline import RAGPipeline
-    from ..ai_core.ai_analyzer import TaskAIAnalyzer
+except Exception as e:
+    print(f"Notice: TaskAIAnalyzer fallback -> {e}")
+    TaskAIAnalyzer = None
+
 
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')

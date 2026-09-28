@@ -17,6 +17,7 @@ COPY . .
 
 # Set environment variables
 ENV PORT=10000
+ENV PYTHONPATH="/app:/app/Function department"
 
 EXPOSE 10000
 
