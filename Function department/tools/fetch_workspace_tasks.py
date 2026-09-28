@@ -50,7 +50,18 @@ class GoogleWorkspaceTaskFetcher:
             lines.append("")
 
         lines.append(f"📊 **Tổng số task chưa hoàn thành**: {total_pending}")
-        lines.append("💡 Ghi chú: Đã đồng bộ trực tiếp với Google Sheets (ID: 1RRb0PJB2EJv...). Nộp file đính kèm vào Zalo Group để tự động nghiệm thu.")
+        sheet_url = "https://docs.google.com/spreadsheets/d/1RRb0PJB2EJv02aK1WfF5l4Z2e1xK2_P/edit"
+        lines.append(f"💡 **Ghi chú:** Đã đồng bộ trực tiếp với [Bảng Quản Lý Nhiệm Vụ Google Sheets]({sheet_url}).")
+        lines.append("")
+        lines.append("📥 **HƯỚNG DẪN NỘP FILE TỰ ĐỘNG NGHIỆM THU:**")
+        lines.append("• **Cách nộp:** Nộp file đính kèm trực tiếp vào Zalo Group để tự động nghiệm thu.")
+        lines.append("• **Cấu trúc đặt tên tệp (Format):**")
+        lines.append("  `[Số thứ tự ID] - [Nội dung ngắn gọn] - [Tên Chuyên viên]`")
+        lines.append("  *(Lưu ý: Số thứ tự ID ở đầu tên tệp là bắt buộc để hệ thống AI tự động đối soát đúng Task ID, số ký hiệu, trích yếu và ngày tháng. Phần nội dung và tên chuyên viên có thể viết ngắn gọn hoặc viết tắt như Hận, hận, han, An...)*")
+        lines.append("")
+        lines.append("📌 **Ví dụ cụ thể:**")
+        lines.append("  1️⃣ `1 - Thẩm định phương án tài chính BOT Cầu Cần Giờ - Hận.pdf`")
+        lines.append("  2️⃣ `4 - Báo cáo rà soát ODA - An.docx`")
         return "\n".join(lines)
 
 if __name__ == "__main__":

@@ -42,6 +42,32 @@ class WebSearchGrounder:
             pass
         return results
 
+    def search_google_news_rss(self, query: str) -> List[Dict[str, str]]:
+        encoded_query = urllib.parse.quote(query)
+        url = f"https://news.google.com/rss/search?q={encoded_query}&hl=vi&gl=VN&ceid=VN:vi"
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        results = []
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                xml_data = resp.read().decode('utf-8', errors='ignore')
+                import xml.etree.ElementTree as ET
+                root = ET.fromstring(xml_data)
+                items = root.findall('.//item')[:4]
+                for item in items:
+                    title_elem = item.find('title')
+                    link_elem = item.find('link')
+                    pub_elem = item.find('pubDate')
+                    if title_elem is not None and title_elem.text:
+                        results.append({
+                            "title": f"[Google News] {title_elem.text}",
+                            "url": link_elem.text if link_elem is not None else "",
+                            "snippet": f"Tin tức trực tuyến: {title_elem.text} (Thời gian: {pub_elem.text if pub_elem is not None else 'mới nhất'})"
+                        })
+        except Exception:
+            pass
+        return results
+
     def search_wikipedia_vi(self, query: str) -> List[Dict[str, str]]:
         encoded_query = urllib.parse.quote(query)
         url = f"https://vi.wikipedia.org/w/api.php?action=query&list=search&srsearch={encoded_query}&format=json"
@@ -132,14 +158,17 @@ class WebSearchGrounder:
             for vn_name, en_name in team_map.items():
                 eng_q = re.sub(rf'\b{vn_name}\b', en_name, eng_q, flags=re.IGNORECASE)
             
-            results = self.search_duckduckgo_lite(f"{eng_q} match result score")
+            results = self.search_google_news_rss(query)
+            ddg_res = self.search_duckduckgo_lite(f"{eng_q} match result score")
+            if ddg_res:
+                results.extend(ddg_res)
             if not results:
                 results = self.search_duckduckgo_lite(f"{clean_q} tỷ số kết quả")
-            if not results:
-                results = self.search_duckduckgo_lite(clean_q)
-
         else:
-            results = self.search_duckduckgo_lite(clean_q)
+            results = self.search_google_news_rss(clean_q)
+            ddg_res = self.search_duckduckgo_lite(clean_q)
+            if ddg_res:
+                results.extend(ddg_res)
 
         if not results:
             results = self.search_duckduckgo_json(clean_q)
