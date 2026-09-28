@@ -130,13 +130,13 @@ class IntegratedZaloBotAgent:
         if any(k in text_lower for k in ["nhắc việc", "danh sách task", "tiến độ", "nhiệm vụ", "hạn chót", "google sheet"]):
             return self.workspace_fetcher.generate_formatted_reminder()
 
-        # 3. Direct Time/Date Queries
-        if any(k in text_lower for k in ["mấy giờ", "ngày mấy", "hôm nay là", "thời gian hiện tại"]):
+        # 3. Direct Time/Date Queries (Strict trigger only)
+        if text_lower in ["/time", "mấy giờ rồi", "bây giờ là mấy giờ"]:
             return f"⏰ {system_time_context}\n\nZalo Bot luôn hoạt động trên thời gian thực mới nhất."
 
         # 4. Multi-Engine Web Search Grounding (Live Internet Search)
         web_context = ""
-        search_res = self.web_grounder.ground_query(user_text)
+        search_res = self.web_grounder.ground_query(user_text) if self.web_grounder else {"has_results": False}
         if search_res.get("has_results"):
             web_context = f"\n\n--- DỮ LIỆU TÌM KIẾM WEB THỰC TẾ TRỰC TUYẾN (GROUNDING) ---\n{search_res['grounded_context']}"
 
@@ -150,15 +150,16 @@ class IntegratedZaloBotAgent:
         web_context += dept_knowledge
 
         # Local Document RAG Retrieval
-        try:
-            rag_chunks = self.rag_pipeline.retriever.search(user_text, top_k=3)
-            if rag_chunks:
-                rag_str = "\n\n--- KHO TÀI LIỆU NỘI BỘ (LOCAL RAG VECTOR CORPUS) ---\n"
-                for c in rag_chunks:
-                    rag_str += f"[Nguồn: {c.get('source', 'Văn bản')}]\n{c.get('text', '')}\n\n"
-                web_context += rag_str
-        except Exception:
-            pass
+        if self.rag_pipeline and hasattr(self.rag_pipeline, "retriever") and self.rag_pipeline.retriever:
+            try:
+                rag_chunks = self.rag_pipeline.retriever.search(user_text, top_k=3)
+                if rag_chunks:
+                    rag_str = "\n\n--- KHO TÀI LIỆU NỘI BỘ (LOCAL RAG VECTOR CORPUS) ---\n"
+                    for c in rag_chunks:
+                        rag_str += f"[Nguồn: {c.get('source', 'Văn bản')}]\n{c.get('text', '')}\n\n"
+                    web_context += rag_str
+            except Exception:
+                pass
 
         prompt = f"""{system_time_context}
 Bạn là Trợ lý AI Thông minh (Zalo Bot AI) của Phòng Hợp tác Công tư và Quản lý Nợ - Sở Tài chính TP.HCM.
@@ -166,18 +167,26 @@ Xưng hô chuẩn công vụ: Bắt đầu câu trả lời bằng "Dạ chào A
 Thành viên: {sender_name} hỏi: "{user_text}"
 {web_context}
 
-Yêu cầu trả lời:
+Yêu cầu trả lời BẮT BUỘC:
+- TUYỆT ĐỐI KHÔNG SUY DIỄN THÔNG TIN KHI CHƯA CÓ CĂN CỨ VĂN BẢN HOẶC DỮ LIỆU WEB THỰC TẾ.
+- TUYỆT ĐỐI KHÔNG TỰ BỊA TỶ SỐ THỂ THAO, CON SỐ TÀI CHÍNH, GIÁ CỔ PHIẾU HAY NỘI DUNG VĂN BẢN KHI DỮ LIỆU TÌM KIẾM HOẶC KHO TÀI LIỆU CHƯA CÓ XÁC THỰC.
+- Nếu là câu hỏi về tỷ số / kết quả thể thao / số liệu: CHỈ ĐƯỢC trích dẫn đúng dữ liệu tìm kiếm web thực tế ở trên. Nếu dữ liệu web chưa có kết quả trận đấu, trả lời rõ: "Dạ hiện tại dữ liệu trực tuyến chưa cập nhật kết quả chính thức của trận đấu này."
+- Nếu là câu hỏi về thuật ngữ / mã số hồ sơ (như "Sai 65" hoặc mã dự án) chưa có thông tin trong kho văn bản, hãy ghi rõ phạm vi hoặc hỏi lại chuyên viên để làm rõ context, tuyệt đối không tự bịa định nghĩa hay suy đoán ngoài hồ sơ.
+- TUYỆT ĐỐI KHÔNG in ra các thẻ hệ thống như [CURRENT SYSTEM METADATA] hay các dòng cấu hình nội bộ ra tin nhắn trả lời người dùng.
 - Luôn giữ thái độ lịch sự, chuyên nghiệp, chuẩn mực văn phong hành chính nhà nước.
-- TUYỆT ĐỐI KHÔNG dùng từ lóng, xưng "bro", "bạn ơi", "tự tìm đi" hay trả lời từ chối chung chung.
-- TUYỆT ĐỐI KHÔNG viết các đoạn giải thích/phân trần/xin lỗi trong ngoặc đơn dài dòng (như "Em xin phép sẽ cập nhật ngay khi...", "Hiện tại chưa có dữ liệu...").
-- Dựa vào DỮ LIỆU TÌM KIẾM WEB THỰC TẾ và THÔNG TIN NỘI BỘ ở trên để trả lời trực tiếp, đầy đủ, chính xác.
+- TUYỆT ĐỐI KHÔNG dùng từ lóng, xưng "bro", "bạn ơi", "tự tìm đi" hay viết các đoạn giải thích phân trần dài dòng trong ngoặc đơn.
 - Trình bày Markdown rõ ràng trên Zalo."""
 
-        # 5. Gemini Synthesis Engine with Live Search Grounding & Fast Quotas Failover
+        # 5. Gemini Synthesis Engine with Low-Temperature (0.0) Zero-Hallucination Config
+        gen_config = types.GenerateContentConfig(
+            temperature=0.0,
+            top_p=0.8,
+        )
         models_to_try = ['gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.6-flash', 'gemini-3.7-flash']
         for m in models_to_try:
             try:
-                resp = self.client.models.generate_content(model=m, contents=prompt)
+                resp = self.client.models.generate_content(model=m, contents=prompt, config=gen_config)
+
                 if resp.text and resp.text.strip():
                     ans = resp.text.strip()
                     if not any(refusal in ans for refusal in ["hệ thống bot không thể đồng bộ", "bạn có thể tự tìm", "do dữ liệu biến động từng giây", "Em xin phép sẽ cập nhật"]):

@@ -100,8 +100,8 @@ class WebSearchGrounder:
         sports_keywords = ["tỷ số", "bóng đá", "kết quả", "trận", "nations league", "euro", "cúp", "ngoại hạng", "champions league"]
         is_specialized = False
 
-        # Clean conversational filler noise
-        clean_q = re.sub(r'(\blà bao nhiêu\b|\bnhư thế nào\b|\bcho xin\b|\bvới bro\b|\bcho tui\b|\blà ai\b|\bhôm nay\b|\bbao nhiêu\b|\bcủa\b)', '', query, flags=re.IGNORECASE)
+        # Clean conversational filler noise (keep temporal anchors like 'hôm nay')
+        clean_q = re.sub(r'(\blà bao nhiêu\b|\bnhư thế nào\b|\bcho xin\b|\bvới bro\b|\bcho tui\b|\blà ai\b|\bbao nhiêu\b|\bcủa\b)', '', query, flags=re.IGNORECASE)
         clean_q = re.sub(r'\s+', ' ', clean_q).strip()
 
         if any(k in q_lower for k in legal_keywords):
@@ -116,7 +116,7 @@ class WebSearchGrounder:
             is_specialized = True
             search_q = f"giá cổ phiếu {clean_q} CafeF Vietstock 2026"
             results = self.search_duckduckgo_lite(search_q)
-        elif any(k in q_lower for k in sports_keywords):
+        elif any(k in q_lower for k in sports_keywords) or any(k in q_lower for k in ["inter miami", "messi", "ronaldo", "man utd", "real madrid", "barcelona"]):
             is_specialized = True
             team_map = {
                 "na uy": "Norway", "norway": "Norway",
@@ -125,17 +125,19 @@ class WebSearchGrounder:
                 "ý": "Italy", "italia": "Italy",
                 "bỉ": "Belgium", "anh": "England",
                 "tbn": "Spain", "tây ban nha": "Spain",
-                "pháp": "France", "đức": "Germany", "hà lan": "Netherlands"
+                "pháp": "France", "đức": "Germany", "hà lan": "Netherlands",
+                "inter miami": "Inter Miami MLS"
             }
             eng_q = clean_q
             for vn_name, en_name in team_map.items():
                 eng_q = re.sub(rf'\b{vn_name}\b', en_name, eng_q, flags=re.IGNORECASE)
             
-            results = self.search_duckduckgo_lite(f"{eng_q} match report goalscorers score")
+            results = self.search_duckduckgo_lite(f"{eng_q} match result score")
             if not results:
                 results = self.search_duckduckgo_lite(f"{clean_q} tỷ số kết quả")
             if not results:
                 results = self.search_duckduckgo_lite(clean_q)
+
         else:
             results = self.search_duckduckgo_lite(clean_q)
 
