@@ -28,7 +28,7 @@ class GoogleWorkspaceTaskFetcher:
         all_tasks = self.task_manager.get_all_tasks_from_sheet()
         return [t for t in all_tasks if t.get("status") != "Đã hoàn thành"]
 
-    def generate_formatted_reminder(self) -> str:
+    def generate_reminder_parts(self) -> tuple:
         all_tasks = self.task_manager.get_all_tasks_from_sheet()
         completed_tasks = [t for t in all_tasks if t.get("status") == "Đã hoàn thành"]
         count_completed = len(completed_tasks)
@@ -101,17 +101,27 @@ class GoogleWorkspaceTaskFetcher:
         lines.append("🔗 **ĐƯỜNG DẪN TRUY CẬP GOOGLE SHEETS:**")
         lines.append("👉 **Link trực tiếp:**")
         lines.append(sheet_url)
-        lines.append("")
-        lines.append("📥 **HƯỚNG DẪN NỘP FILE TỰ ĐỘNG NGHIỆM THU:**")
-        lines.append("• **Cách nộp:** Nộp file đính kèm trực tiếp vào Zalo Group để tự động nghiệm thu.")
-        lines.append("• **Cấu trúc đặt tên tệp (Format):**")
-        lines.append("  `[Số thứ tự ID] - [Nội dung ngắn gọn] - [Tên Chuyên viên]`")
-        lines.append("  *(Lưu ý: Số thứ tự ID ở đầu tên tệp là bắt buộc để hệ thống AI tự động quét đối soát đúng Task ID, số ký hiệu, trích yếu và ngày tháng. Phần nội dung và tên chuyên viên có thể viết ngắn gọn hoặc viết tắt như Hận, hận, han, An...)*")
-        lines.append("")
-        lines.append("📌 **Ví dụ cụ thể:**")
-        lines.append("  1️⃣ `1 - Thẩm định phương án tài chính BOT Cầu Cần Giờ - Hận.pdf`")
-        lines.append("  2️⃣ `4 - Báo cáo rà soát ODA - An.docx`")
-        return "\n".join(lines)
+        
+        report_msg = "\n".join(lines)
+
+        guide_lines = [
+            "📥 **HƯỚNG DẪN NỘP FILE TỰ ĐỘNG NGHIỆM THU:**",
+            "• **Cách nộp:** Nộp file đính kèm trực tiếp vào Zalo Group để tự động nghiệm thu.",
+            "• **Cấu trúc đặt tên tệp (Format):**",
+            "  `[Số thứ tự ID] - [Nội dung ngắn gọn] - [Tên Chuyên viên]`",
+            "  *(Lưu ý: Số thứ tự ID ở đầu tên tệp là bắt buộc để hệ thống AI tự động quét đối soát đúng Task ID, số ký hiệu, trích yếu và ngày tháng. Phần nội dung và tên chuyên viên có thể viết ngắn gọn hoặc viết tắt như Hận, hận, han, An...)*",
+            "",
+            "📌 **Ví dụ cụ thể:**",
+            "  1️⃣ `1 - Thẩm định phương án tài chính BOT Cầu Cần Giờ - Hận.pdf`",
+            "  2️⃣ `4 - Báo cáo rà soát ODA - An.docx`"
+        ]
+        guide_msg = "\n".join(guide_lines)
+
+        return report_msg, guide_msg
+
+    def generate_formatted_reminder(self) -> str:
+        report_msg, guide_msg = self.generate_reminder_parts()
+        return f"{report_msg}\n\n---\n\n{guide_msg}"
 
 if __name__ == "__main__":
     fetcher = GoogleWorkspaceTaskFetcher()
