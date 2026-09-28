@@ -135,8 +135,9 @@ def process_message(msg_obj: dict):
     print(f"\n📩 [TIN NHẮN] Từ: {sender_name} ({chat_type}) | ChatID: {chat_id} | Nội dung: '{raw_text}'", flush=True)
     clean_text = raw_text.lower()
     
-    # 1. Lệnh Nhắc việc / Báo cáo tiến độ
-    if any(cmd in clean_text for cmd in ["/nhacviec", "/tasks", "/tiendo", "nhắc việc", "báo cáo", "tiến độ", "nhiệm vụ"]):
+    # 1. Lệnh Nhắc việc / Báo cáo tiến độ (Bao quát cả có dấu và không dấu)
+    task_keywords = ["/nhacviec", "nhacviec", "nhac việc", "nhắc việc", "nhac_viec", "/tasks", "tasks", "task", "/tiendo", "tiendo", "tien do", "tiến độ", "nhiệm vụ", "nhiem vu", "báo cáo tiến độ", "bao cao tien do", "danh sách task"]
+    if any(cmd in clean_text for cmd in task_keywords):
         print(f"--> Đang xuất báo cáo tiến độ từ Google Sheets...", flush=True)
         reminder = generate_reminder_message()
         send_zalo_message(chat_id, reminder)

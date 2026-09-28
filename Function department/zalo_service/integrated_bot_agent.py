@@ -126,8 +126,9 @@ class IntegratedZaloBotAgent:
                     resp.append(f"🔴 Lý do sai lệch: {review_res.get('discrepancy_reason')}")
                 return "\n".join(resp)
 
-        # 2. Google Workspace Task Query Workflow
-        if any(k in text_lower for k in ["nhắc việc", "danh sách task", "tiến độ", "nhiệm vụ", "hạn chót", "google sheet"]):
+        # 2. Google Workspace Task Query Workflow (Complete accented & unaccented keywords)
+        task_keywords = ["/nhacviec", "nhacviec", "nhac việc", "nhắc việc", "nhac_viec", "/tasks", "tasks", "task", "/tiendo", "tiendo", "tien do", "tiến độ", "nhiệm vụ", "nhiem vu", "báo cáo tiến độ", "bao cao tien do", "danh sách task", "google sheet"]
+        if any(k in text_lower for k in task_keywords):
             return self.workspace_fetcher.generate_formatted_reminder()
 
         # 3. Direct Time/Date Queries (Strict trigger only)

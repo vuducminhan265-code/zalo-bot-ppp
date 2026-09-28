@@ -39,25 +39,56 @@ class GoogleWorkspaceTaskFetcher:
         ]
 
         total_pending = 0
+        count_overdue = 0
+        count_today = 0
+        count_upcoming = 0
+        assignee_stats = {}
+
         for assignee, tasks in grouped.items():
             lines.append(f"👤 **{assignee.upper()}** ({len(tasks)} nhiệm vụ):")
+            assignee_stats[assignee] = {"total": len(tasks), "overdue": 0, "today": 0, "upcoming": 0}
             for t in tasks:
                 total_pending += 1
                 urg = t.get('urgency_status')
-                prio_icon = "🔴 [Quá hạn]" if urg == 'overdue' else ("⚠️ [Sắp hạn]" if urg == 'due_soon' else ("⚠️ [Hôm nay]" if urg == 'due_today' else "🔹"))
+                if urg == 'overdue':
+                    count_overdue += 1
+                    assignee_stats[assignee]["overdue"] += 1
+                    prio_icon = "🔴 [Quá hạn]"
+                elif urg in ['due_today', 'due_soon']:
+                    count_today += 1
+                    assignee_stats[assignee]["today"] += 1
+                    prio_icon = "⚠️ [Hôm nay/Sắp hạn]"
+                else:
+                    count_upcoming += 1
+                    assignee_stats[assignee]["upcoming"] += 1
+                    prio_icon = "🔹 [Trong hạn]"
+
                 lines.append(f"   • {prio_icon} [{t.get('task_id')}] {t.get('task_name')}")
                 lines.append(f"     ⏳ Deadline: {t.get('deadline')} ({t.get('days_diff_text')}) | Trạng thái: {t.get('status')}")
             lines.append("")
 
-        lines.append(f"📊 **Tổng số task chưa hoàn thành**: {total_pending}")
-        sheet_url = "https://docs.google.com/spreadsheets/d/1RRb0PJB2EJv02aK1WfF5l4Z2e1xK2_P/edit"
-        lines.append(f"💡 **Ghi chú:** Đã đồng bộ trực tiếp với [Bảng Quản Lý Nhiệm Vụ Google Sheets]({sheet_url}).")
+        lines.append("📊 ═════ [THỐNG KÊ CHI TIẾT TỔNG HỢP TIẾN ĐỘ] ═════")
+        lines.append(f"• 🔴 **Nhiệm vụ Quá hạn:** {count_overdue} nhiệm vụ ({(count_overdue/total_pending*100):.1f}%)")
+        lines.append(f"• ⚠️ **Nhiệm vụ Hạn hôm nay / Sắp hạn:** {count_today} nhiệm vụ ({(count_today/total_pending*100):.1f}%)")
+        lines.append(f"• 🔹 **Nhiệm vụ Đang trong hạn:** {count_upcoming} nhiệm vụ ({(count_upcoming/total_pending*100):.1f}%)")
+        lines.append(f"📈 **TỔNG SỐ TASK CHƯA HOÀN THÀNH:** {total_pending} nhiệm vụ")
+        lines.append("")
+        lines.append("👥 **Phân bổ theo Chuyên viên phụ trách:**")
+        for idx, (ass, st) in enumerate(assignee_stats.items(), 1):
+            lines.append(f"  {idx}️⃣ **{ass}**: {st['total']} task ({st['overdue']} quá hạn, {st['today']} đến hạn)")
+        lines.append("")
+
+        sheet_url = "https://docs.google.com/spreadsheets/d/1RRb0PJB2EJv92SPHZ3_ahv2YYEn9bxjfC8JBPpTkuG4/edit?usp=sharing"
+        short_url = "https://tinyurl.com/29qksg62"
+        lines.append("🔗 **ĐƯỜNG DẪN TRUY CẬP GOOGLE SHEETS:**")
+        lines.append(f"👉 **Link rút gọn:** {short_url}")
+        lines.append(f"👉 **Link trực tiếp:** {sheet_url}")
         lines.append("")
         lines.append("📥 **HƯỚNG DẪN NỘP FILE TỰ ĐỘNG NGHIỆM THU:**")
         lines.append("• **Cách nộp:** Nộp file đính kèm trực tiếp vào Zalo Group để tự động nghiệm thu.")
         lines.append("• **Cấu trúc đặt tên tệp (Format):**")
         lines.append("  `[Số thứ tự ID] - [Nội dung ngắn gọn] - [Tên Chuyên viên]`")
-        lines.append("  *(Lưu ý: Số thứ tự ID ở đầu tên tệp là bắt buộc để hệ thống AI tự động đối soát đúng Task ID, số ký hiệu, trích yếu và ngày tháng. Phần nội dung và tên chuyên viên có thể viết ngắn gọn hoặc viết tắt như Hận, hận, han, An...)*")
+        lines.append("  *(Lưu ý: Số thứ tự ID ở đầu tên tệp là bắt buộc để hệ thống AI tự động quét đối soát đúng Task ID, số ký hiệu, trích yếu và ngày tháng. Phần nội dung và tên chuyên viên có thể viết ngắn gọn hoặc viết tắt như Hận, hận, han, An...)*")
         lines.append("")
         lines.append("📌 **Ví dụ cụ thể:**")
         lines.append("  1️⃣ `1 - Thẩm định phương án tài chính BOT Cầu Cần Giờ - Hận.pdf`")
