@@ -53,10 +53,11 @@ class IntegratedZaloBotAgent:
 
     def __init__(self, api_key: str = None):
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
-        self.web_grounder = WebSearchGrounder()
-        self.workspace_fetcher = GoogleWorkspaceTaskFetcher()
-        self.rag_pipeline = RAGPipeline(api_key=self.api_key)
-        self.ai_analyzer = TaskAIAnalyzer(api_key=self.api_key)
+        self.web_grounder = WebSearchGrounder() if WebSearchGrounder else None
+        self.workspace_fetcher = GoogleWorkspaceTaskFetcher() if GoogleWorkspaceTaskFetcher else None
+        self.rag_pipeline = RAGPipeline(api_key=self.api_key) if RAGPipeline else None
+        self.ai_analyzer = TaskAIAnalyzer(api_key=self.api_key) if TaskAIAnalyzer else None
+
         
         if self.api_key:
             self.client = genai.Client(api_key=self.api_key, http_options=types.HttpOptions(timeout=12000))
