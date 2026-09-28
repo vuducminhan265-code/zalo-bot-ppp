@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: zalo-bot-ppp-service
+    env: python
+    buildCommand: "npm install -g n8n && pip install -r requirements.txt"
+    startCommand: "npx n8n start & python 'Function department/zalo_service/zalo_bot_service.py'"
+    envVars:
+      - key: ZALO_BOT_TOKEN
+        value: "1175912593990733827:IQHQDAkiFOfwODzTmEKdPvfCSbDJubszVeLXcvxwqTSZXPbNaBaTLYQAmeXpAWMX"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: N8N_BASIC_AUTH_ACTIVE
+        value: "false"

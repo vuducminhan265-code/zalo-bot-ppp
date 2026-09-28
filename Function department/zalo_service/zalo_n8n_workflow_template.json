@@ -1,0 +1,202 @@
+{
+  "name": "Zalo Bot PPP Full Service - Multi-Tool AI Agent & Search",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zalo-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-zalo",
+      "name": "Zalo Webhook Inbound",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 300],
+      "webhookId": "zalo-webhook"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"status\": \"success\"\n}",
+        "options": {}
+      },
+      "id": "respond-webhook",
+      "name": "Respond to Zalo Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [440, 180]
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "Bạn là Trợ lý AI cao cấp của phòng Hợp tác Công tư & Quản lý Nợ (PPP & QLN), Sở Tài chính TP.HCM.\n- Đi thẳng vào trọng tâm, súc tích, logic, chính xác.\n- Tự động dùng công cụ 'Google Web Search Grounding' khi được hỏi về các sự kiện thời sự, tin tức mới, giá cổ phiếu, giá vàng, thể thao và quy định pháp luật mới.\n- Tự động dùng công cụ 'NotebookLM Knowledge Base' khi được hỏi về quy định pháp luật PPP, Nghị định 243/312, cơ chế tài chính BT/BOT.\n- Tự động dùng công cụ 'Google Sheets Task Reminders' khi được yêu cầu nhắc việc hoặc báo cáo tiến độ nhiệm vụ."
+        }
+      },
+      "id": "ai-agent",
+      "name": "AI Agent (Gemini + Multi-Tools)",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [520, 400]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.6-flash",
+        "options": {}
+      },
+      "id": "gemini-model",
+      "name": "Google Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [360, 600]
+    },
+    {
+      "parameters": {
+        "sessionTTL": 3600
+      },
+      "id": "simple-memory",
+      "name": "Window Buffer Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.2,
+      "position": [520, 600]
+    },
+    {
+      "parameters": {
+        "name": "Google_Web_Search_Grounding",
+        "description": "Tra cứu thông tin tin tức, giá cổ phiếu VIC/HPG, giá vàng, thể thao và sự kiện thời gian thực trên Google Search.",
+        "language": "javaScript",
+        "jsCode": "const query = $fromAI('query', 'Từ khóa tìm kiếm tin tức/giá cả trên web');\nreturn JSON.stringify({ action: 'web_search', query: query });"
+      },
+      "id": "tool-web-search",
+      "name": "Google Web Search Grounding",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1,
+      "position": [680, 600]
+    },
+    {
+      "parameters": {
+        "name": "NotebookLM_Knowledge_Base",
+        "description": "Tra cứu quy định pháp luật PPP, Nghị định 243/312, cơ chế tài chính dự án BT/BOT và tài liệu nghiệp vụ phòng PPP.",
+        "language": "javaScript",
+        "jsCode": "const question = $fromAI('question', 'Câu hỏi nghiệp vụ PPP hoặc tài chính');\nreturn JSON.stringify({ action: 'notebooklm_query', question: question });"
+      },
+      "id": "tool-notebooklm",
+      "name": "NotebookLM Knowledge Base (Learning PPP)",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1,
+      "position": [840, 600]
+    },
+    {
+      "parameters": {
+        "name": "Google_Sheets_Task_Reminders",
+        "description": "Báo cáo danh sách nhiệm vụ đang chờ xử lý theo chuyên viên phòng PPP từ Google Sheets 13 cột.",
+        "language": "javaScript",
+        "jsCode": "return JSON.stringify({ action: 'fetch_tasks' });"
+      },
+      "id": "tool-google-sheets",
+      "name": "Google Sheets Task Reminders",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1,
+      "position": [1000, 600]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://bot-api.zaloplatforms.com/bot1175912593990733827:IQHQDAkiFOfwODzTmEKdPvfCSbDJubszVeLXcvxwqTSZXPbNaBaTLYQAmeXpAWMX/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $('Zalo Webhook Inbound').item.json.body.result.message.chat.id }}\",\n  \"text\": \"{{ $json.output }}\",\n  \"parse_mode\": \"markdown\"\n}",
+        "options": {}
+      },
+      "id": "send-zalo-reply",
+      "name": "Send Zalo Reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 400]
+    }
+  ],
+  "connections": {
+    "Zalo Webhook Inbound": {
+      "main": [
+        [
+          {
+            "node": "Respond to Zalo Webhook",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "AI Agent (Gemini + Multi-Tools)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent (Gemini + Multi-Tools)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Window Buffer Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent (Gemini + Multi-Tools)",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Web Search Grounding": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent (Gemini + Multi-Tools)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NotebookLM Knowledge Base (Learning PPP)": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent (Gemini + Multi-Tools)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets Task Reminders": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent (Gemini + Multi-Tools)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent (Gemini + Multi-Tools)": {
+      "main": [
+        [
+          {
+            "node": "Send Zalo Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
