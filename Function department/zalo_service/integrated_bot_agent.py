@@ -138,8 +138,9 @@ class IntegratedZaloBotAgent:
         # 4. Context Grounding Assembly
         web_context = ""
 
-        # A. Always inject Live Google Workspace Tasks Context into prompt
-        if self.workspace_fetcher:
+        # A. Inject Live Google Workspace Tasks Context ONLY when query explicitly asks about work tasks/personnel
+        task_query_keywords = ["task", "nhiệm vụ", "giao việc", "tiến độ", "nhắc việc", "hận", "hòa", "thoa", "hoàng", "chuyên viên", "deadline", "quá hạn"]
+        if self.workspace_fetcher and any(k in text_lower for k in task_query_keywords):
             try:
                 live_tasks_summary = self.workspace_fetcher.generate_formatted_reminder()
                 web_context += f"\n\n--- DỮ LIỆU BẢNG GIAO VIỆC GOOGLE WORKSPACE (LIVE TASKS DATA) ---\n{live_tasks_summary}\n"
