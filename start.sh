@@ -10,10 +10,12 @@ export N8N_LISTEN_ADDRESS=0.0.0.0
 export N8N_PROTOCOL=https
 export N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
 export N8N_BASIC_AUTH_ACTIVE=false
-export N8N_DIAGNOSTICS_ENABLED=false
-export N8N_VERSION_NOTIFICATIONS_ENABLED=false
-export N8N_USER_MANAGEMENT_DISABLED=true
 export N8N_ENCRYPTION_KEY="alexander_ppp_master_encryption_key_2026"
+export N8N_INSTANCE_OWNER_MANAGED_BY_ENV=true
+export N8N_INSTANCE_OWNER_EMAIL=canimarun123@gmail.com
+export N8N_INSTANCE_OWNER_FIRST_NAME=Alex
+export N8N_INSTANCE_OWNER_LAST_NAME=Vu
+export N8N_INSTANCE_OWNER_PASSWORD_HASH='$2b$10$e73b6d3a305a62e73b6d3uW.r.Yg.k9Vv8pQ.zQ'
 
 # 1. Clean slate migration, Seed Credentials & Workflow Import
 echo "📥 Auto-importing Gemini Credentials & Zalo AI Agent Workflow into Cloud n8n..."

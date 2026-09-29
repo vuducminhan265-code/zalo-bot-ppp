@@ -252,11 +252,39 @@ def process_message(msg_obj: dict):
             ai_ans = call_gemini(str(chat_id), ai_query, sender_name=sender_name)
             send_zalo_message(chat_id, ai_ans)
 
+def auto_setup_n8n_owner():
+    """Tự động gọi /rest/owner/setup sau khi n8n khởi động để triệt tiêu màn hình Set up owner account."""
+    time.sleep(5)
+    port = os.getenv("PORT", "10000")
+    setup_url = f"http://127.0.0.1:{port}/rest/owner/setup"
+    payload = {
+        "email": "canimarun123@gmail.com",
+        "firstName": "Alex",
+        "lastName": "Vu",
+        "password": "Password123@AlexVu",
+        "agreeToTerms": True
+    }
+    for attempt in range(12):
+        try:
+            resp = requests.post(setup_url, json=payload, timeout=5)
+            if resp.status_code in [200, 201]:
+                print(f"✅ [N8N Auto-Owner Setup] Đã tự động tạo tài khoản Owner thành công (lần thử {attempt+1})!", flush=True)
+                break
+            elif resp.status_code == 400 and "already" in resp.text.lower():
+                print("ℹ️ [N8N Auto-Owner Setup] Tài khoản Owner đã được tạo sẵn.", flush=True)
+                break
+        except Exception:
+            pass
+        time.sleep(2)
+
 def start_bot_service():
     print("==================================================", flush=True)
     print("🚀 BOT PPP FULL SERVICE - STATEFUL GEMINI FLAGSHIP", flush=True)
     print(f"⏰ Khởi động lúc: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", flush=True)
     print("==================================================", flush=True)
+    
+    # Kích hoạt tiến trình tự động khởi tạo Owner n8n ngầm
+    threading.Thread(target=auto_setup_n8n_owner, daemon=True).start()
     
     try:
         me = requests.get(f"{BASE_URL}/getMe").json()
