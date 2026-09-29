@@ -7,13 +7,15 @@ echo "=================================================="
 export N8N_PORT=${PORT:-10000}
 export N8N_HOST=0.0.0.0
 export N8N_LISTEN_ADDRESS=0.0.0.0
+export N8N_PROTOCOL=https
 export N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
 export N8N_BASIC_AUTH_ACTIVE=false
 export N8N_DIAGNOSTICS_ENABLED=false
 export N8N_VERSION_NOTIFICATIONS_ENABLED=false
 export N8N_LOG_LEVEL=info
-export N8N_EDITOR_BASE_URL=https://zalo-bot-ppp-service.onrender.com/
+export N8N_EDITOR_BASE_URL=https://zalo-bot-ppp-service.onrender.com
 export WEBHOOK_URL=https://zalo-bot-ppp-service.onrender.com/
+export N8N_WEBHOOK_URL=https://zalo-bot-ppp-service.onrender.com/
 
 # 1. Clean slate migration & Workflow Import
 echo "📥 Importing Zalo AI Agent Workflow into Cloud n8n..."
