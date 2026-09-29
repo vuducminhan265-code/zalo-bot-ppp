@@ -101,16 +101,95 @@ def send_zalo_message(chat_id: str, text: str):
     except Exception as e:
         print(f"Error sending message: {e}", flush=True)
 
+def download_zalo_file(file_id: str = None, file_name: str = None, direct_url: str = None) -> str:
+    """Tải tệp đính kèm gửi qua Zalo Bot (PDF, DOCX, XLSX, hình ảnh) về thư mục tạm."""
+    import tempfile
+    clean_name = re.sub(r'[^\w\-_\.]', '_', file_name or "document.pdf")
+    local_path = os.path.join(tempfile.gettempdir(), f"zalo_{int(time.time())}_{clean_name}")
+    try:
+        if direct_url:
+            r = requests.get(direct_url, timeout=30)
+            if r.status_code == 200 and len(r.content) > 0:
+                with open(local_path, "wb") as f:
+                    f.write(r.content)
+                return local_path
+                
+        if file_id:
+            info_resp = requests.get(f"{BASE_URL}/getFile?file_id={file_id}", timeout=15)
+            data = info_resp.json()
+            if data.get("ok"):
+                f_info = data.get("result", {})
+                dl_url = f_info.get("download_url") or f_info.get("file_path")
+                if dl_url:
+                    if not dl_url.startswith("http"):
+                        dl_url = f"https://bot-api.zaloplatforms.com/file/bot{BOT_TOKEN}/{dl_url}"
+                    r = requests.get(dl_url, timeout=30)
+                    if r.status_code == 200 and len(r.content) > 0:
+                        with open(local_path, "wb") as f:
+                            f.write(r.content)
+                        return local_path
+    except Exception as e:
+        print(f"⚠️ [Lỗi tải file Zalo]: {e}", flush=True)
+    return None
+
 def process_message(msg_obj: dict):
-    """Xử lý sự kiện tin nhắn nhận được từ người dùng hoặc nhóm."""
+    """Xử lý sự kiện tin nhắn nhận được từ người dùng hoặc nhóm (bao gồm tệp đính kèm văn bản báo cáo)."""
     chat = msg_obj.get("chat", {})
     chat_id = chat.get("id")
     chat_type = chat.get("chat_type", "UNKNOWN")
     from_user = msg_obj.get("from", {})
-    sender_name = from_user.get("display_name") or from_user.get("name") or "Bạn"
-    raw_text = (msg_obj.get("text") or "").strip()
+    sender_name = from_user.get("display_name") or from_user.get("name") or "Chuyên viên"
+    raw_text = (msg_obj.get("text") or msg_obj.get("caption") or "").strip()
     
-    if not chat_id or not raw_text:
+    # 0. Bóc tách tệp đính kèm (Document / File / Photo)
+    doc_obj = msg_obj.get("document") or msg_obj.get("file")
+    photo_obj = msg_obj.get("photo")
+    attachments = msg_obj.get("attachments") or []
+    
+    file_attachment_path = None
+    attached_filename = None
+    
+    if doc_obj and isinstance(doc_obj, dict):
+        f_id = doc_obj.get("file_id")
+        attached_filename = doc_obj.get("file_name") or doc_obj.get("name") or "van_ban.pdf"
+        f_url = doc_obj.get("url") or doc_obj.get("download_url")
+        file_attachment_path = download_zalo_file(f_id, attached_filename, f_url)
+    elif attachments and isinstance(attachments, list) and len(attachments) > 0:
+        att = attachments[0]
+        payload = att.get("payload", {}) if isinstance(att, dict) else {}
+        f_id = payload.get("file_id") or att.get("file_id")
+        attached_filename = payload.get("name") or payload.get("file_name") or "van_ban.pdf"
+        f_url = payload.get("url") or att.get("url")
+        file_attachment_path = download_zalo_file(f_id, attached_filename, f_url)
+    elif photo_obj and isinstance(photo_obj, list) and len(photo_obj) > 0:
+        p = photo_obj[-1]
+        f_id = p.get("file_id")
+        attached_filename = "van_ban_scan.jpg"
+        f_url = p.get("url")
+        file_attachment_path = download_zalo_file(f_id, attached_filename, f_url)
+        
+    if not chat_id or (not raw_text and not file_attachment_path):
+        return
+
+    # Nếu có tệp đính kèm: Kích hoạt quy trình thẩm định nghiệm thu tự động
+    if file_attachment_path and os.path.exists(file_attachment_path):
+        print(f"\n📎 [TỆP ĐÍNH KÈM] Từ: {sender_name} | ChatID: {chat_id} | Tên file: '{attached_filename}'", flush=True)
+        send_zalo_message(chat_id, f"📥 **Đã tiếp nhận tệp:** `{attached_filename}` từ chuyên viên **{sender_name}**.\n🤖 *AI Agent đang tiến hành OCR, đọc thể thức văn bản và thẩm định đối soát với Bảng giao việc Google Sheets...*")
+        try:
+            review_reply = bot_agent.process_message(
+                user_text=raw_text or f"Nộp file {attached_filename}",
+                sender_name=sender_name,
+                file_attachment_path=file_attachment_path
+            )
+            send_zalo_message(chat_id, review_reply)
+        except Exception as e:
+            send_zalo_message(chat_id, f"⚠️ Đã xảy ra lỗi khi thẩm định tệp: {e}")
+        finally:
+            try:
+                if os.path.exists(file_attachment_path):
+                    os.remove(file_attachment_path)
+            except Exception:
+                pass
         return
 
     print(f"\n📩 [TIN NHẮN] Từ: {sender_name} ({chat_type}) | ChatID: {chat_id} | Nội dung: '{raw_text}'", flush=True)

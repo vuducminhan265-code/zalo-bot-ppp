@@ -112,6 +112,19 @@
     },
     {
       "parameters": {
+        "name": "Task_Document_Reviewer_and_Sheets_Updater",
+        "description": "Đọc, bóc tách thể thức văn bản hành chính (Số ký hiệu, Ngày ban hành, Trích yếu) của file tài liệu PDF/Word/Excel nộp lên Zalo, đối soát với Bảng giao việc Google Sheets phòng PPP, và tự động cập nhật trạng thái 'Đã hoàn thành' (nếu khớp) hoặc 'Đang sửa lại' (nếu sai lệch).",
+        "language": "javaScript",
+        "jsCode": "const file = $fromAI('file_name', 'Tên tệp văn bản hoặc mô tả nội dung nộp');\nreturn JSON.stringify({ action: 'review_and_sync_sheet', file: file });"
+      },
+      "id": "tool-doc-reviewer",
+      "name": "Task Document Reviewer & Sheets Updater",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1,
+      "position": [1160, 600]
+    },
+    {
+      "parameters": {
         "method": "POST",
         "url": "https://bot-api.zaloplatforms.com/bot1175912593990733827:IQHQDAkiFOfwODzTmEKdPvfCSbDJubszVeLXcvxwqTSZXPbNaBaTLYQAmeXpAWMX/sendMessage",
         "sendBody": true,
@@ -188,6 +201,17 @@
       ]
     },
     "Google Sheets Task Reminders": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent (Gemini + Multi-Tools)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Task Document Reviewer & Sheets Updater": {
       "ai_tool": [
         [
           {

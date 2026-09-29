@@ -33,6 +33,12 @@ except Exception as e:
     RAGPipeline = None
 
 try:
+    from tools.task_manager import TaskManager
+except Exception as e:
+    print(f"Notice: TaskManager fallback -> {e}")
+    TaskManager = None
+
+try:
     from ai_core.ai_analyzer import TaskAIAnalyzer
 except Exception as e:
     print(f"Notice: TaskAIAnalyzer fallback -> {e}")
@@ -55,6 +61,7 @@ class IntegratedZaloBotAgent:
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
         self.web_grounder = WebSearchGrounder() if WebSearchGrounder else None
         self.workspace_fetcher = GoogleWorkspaceTaskFetcher() if GoogleWorkspaceTaskFetcher else None
+        self.task_manager = TaskManager() if TaskManager else None
         self.rag_pipeline = RAGPipeline(api_key=self.api_key) if RAGPipeline else None
         self.ai_analyzer = TaskAIAnalyzer(api_key=self.api_key) if TaskAIAnalyzer else None
 
@@ -105,25 +112,66 @@ class IntegratedZaloBotAgent:
         system_time_context = self.get_current_system_context()
         text_lower = user_text.lower() if user_text else ""
 
-        # 1. File Attachment Submission Workflow
+        # 1. File Attachment Submission Workflow with Automatic Google Sheets Sync
         if file_attachment_path and os.path.exists(file_attachment_path):
             if self.workspace_fetcher and self.ai_analyzer:
                 pending_tasks = self.workspace_fetcher.fetch_live_tasks()
                 review_res = self.ai_analyzer.review_submission(file_attachment_path, sender_name, pending_tasks)
                 
                 if review_res.get("success"):
-                    status_icon = "✅" if review_res.get("status_decision") == "completed" else "⚠️"
-                    resp = [
-                        f"{status_icon} **[KẾT QUẢ THẨM ĐỊNH AI FILE NỘP]**",
-                        f"👤 Người nộp: {sender_name}",
-                        f"📄 Tệp: {os.path.basename(file_attachment_path)}",
-                        f"🔢 Task ID đối soát: Task #{review_res.get('task_id', 'N/A')}",
-                        f"📌 Trích yếu bóc tách: {review_res.get('actual_summary', 'Chưa xác định')}",
-                        f"💡 Nhận xét AI: {review_res.get('ai_review_comment', '')}"
-                    ]
-                    if review_res.get("discrepancy_reason"):
-                        resp.append(f"🔴 Lý do sai lệch: {review_res.get('discrepancy_reason')}")
-                    return "\n".join(resp)
+                    status_decision = review_res.get("status_decision")
+                    task_id = str(review_res.get("task_id", "")).strip()
+                    actual_summary = review_res.get("actual_summary", "Chưa xác định")
+                    doc_number = review_res.get("document_number", "")
+                    doc_date = review_res.get("document_date", "")
+                    ai_comment = review_res.get("ai_review_comment", "")
+                    discrepancy = review_res.get("discrepancy_reason")
+                    file_name = os.path.basename(file_attachment_path)
+
+                    # Tự động cập nhật Google Sheets
+                    sheets_status = "Đã hoàn thành" if status_decision == "completed" else "Đang sửa lại"
+                    sheets_updated = False
+                    if self.task_manager and task_id:
+                        try:
+                            sheets_updated = self.task_manager.update_task_status_and_metadata(
+                                task_id=task_id,
+                                status=sheets_status,
+                                summary=ai_comment if status_decision == "completed" else f"CẢNH BÁO SAI LỆCH: {discrepancy}",
+                                file_name=file_name,
+                                doc_number=doc_number,
+                                doc_date=doc_date,
+                                actual_summary=actual_summary
+                            )
+                        except Exception as e:
+                            print(f"⚠️ Lỗi update Google Sheets: {e}", flush=True)
+
+                    if status_decision == "completed":
+                        resp = [
+                            "✅ **[KẾT QUẢ THẨM ĐỊNH & NGHIỆM THU TỰ ĐỘNG - PHÒNG PPP]**",
+                            f"👤 Người nộp: **{sender_name}**",
+                            f"📄 Tệp văn bản: `{file_name}`",
+                            f"🔢 Đối soát: **Khớp chuẩn Task #{task_id}**",
+                            f"📌 Trích yếu bóc tách: {actual_summary}",
+                            f"📑 Thể thức: Số {doc_number if doc_number else 'Văn bản nội bộ'} | Ngày {doc_date if doc_date else 'Hiện hành'}",
+                            f"💡 Đánh giá của AI: {ai_comment}",
+                            "────────────────────────────",
+                            f"📊 **Bảng giao việc Google Sheets:** {'ĐÃ TỰ ĐỘNG CẬP NHẬT TRẠNG THÁI \"ĐÃ HOÀN THÀNH\" 🟢' if sheets_updated else 'Đã thẩm định hoàn thành 🟢'}"
+                        ]
+                        return "\n".join(resp)
+                    else:
+                        resp = [
+                            "⚠️ **[CẢNH BÁO THẨM ĐỊNH AI: TỆP NỘP CHƯA KHỚP NỘI DUNG]**",
+                            f"👤 Người nộp: **{sender_name}**",
+                            f"📄 Tệp văn bản: `{file_name}`",
+                            f"🔢 Đối soát: **Task #{task_id if task_id else 'Không xác định'}**",
+                            f"📌 Trích yếu thực tế trong file: {actual_summary}",
+                            f"🔴 **Lý do sai lệch:** {discrepancy if discrepancy else 'Nội dung hoặc trích yếu văn bản chưa khớp với sản phẩm yêu cầu của nhiệm vụ'}",
+                            f"💡 Nhận xét AI: {ai_comment}",
+                            "────────────────────────────",
+                            f"📊 **Bảng giao việc Google Sheets:** {'ĐÃ GHI NHẬN CẢNH BÁO \"ĐANG SỬA LẠI\" 🔴' if sheets_updated else 'Trạng thái: Đang sửa lại 🔴'}",
+                            "👉 Đề nghị chuyên viên rà soát lại văn bản trước khi nộp lại hoặc báo cáo Lãnh đạo nếu có chỉ đạo thay đổi."
+                        ]
+                        return "\n".join(resp)
 
         # 2. Google Workspace Task Query Workflow (Strict template triggers)
         task_template_triggers = ["/nhacviec", "nhacviec", "nhac việc", "/tasks", "/tiendo", "danh sách task", "báo cáo tiến độ", "bao cao tien do"]
