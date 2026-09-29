@@ -33,7 +33,7 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
         elif target_path.startswith("/n8n/"):
             target_path = target_path[4:]
 
-        target_url = f"http://127.0.0.1:5678{target_path}"
+        target_url = f"http://127.0.0.1:5679{target_path}"
         headers = {k: v for k, v in self.headers.items() if k.lower() not in ['host', 'content-length']}
         body = None
         content_length = int(self.headers.get('Content-Length', 0))
@@ -224,7 +224,7 @@ def process_message(msg_obj: dict):
     if ai_query:
         # Try forwarding to n8n Master AI Agent Workflow Webhook
         try:
-            n8n_url = "http://localhost:5678/webhook/zalo-inbound"
+            n8n_url = "http://127.0.0.1:5679/webhook/zalo-inbound"
             n8n_resp = requests.post(n8n_url, json={"chat_id": str(chat_id), "text": ai_query, "sender_name": sender_name}, timeout=15)
             if n8n_resp.status_code == 200 and n8n_resp.text.strip() and not "not registered" in n8n_resp.text:
                 print(f"--> [n8n Master AI Agent Workflow Handled Successfully]", flush=True)
