@@ -48,6 +48,12 @@
         "modelName": "models/gemini-3.5-flash-lite",
         "options": {}
       },
+      "credentials": {
+        "googlePalmApi": {
+          "id": "1",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      },
       "id": "gemini-model",
       "name": "Google Gemini Chat Model",
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
