@@ -8,7 +8,6 @@ export N8N_PORT=${PORT:-10000}
 export N8N_HOST=0.0.0.0
 export N8N_LISTEN_ADDRESS=0.0.0.0
 export N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
-export N8N_USER_MANAGEMENT_DISABLED=true
 export N8N_BASIC_AUTH_ACTIVE=false
 export N8N_DIAGNOSTICS_ENABLED=false
 export N8N_VERSION_NOTIFICATIONS_ENABLED=false
@@ -16,13 +15,9 @@ export N8N_LOG_LEVEL=info
 export N8N_EDITOR_BASE_URL=https://zalo-bot-ppp-service.onrender.com/
 export WEBHOOK_URL=https://zalo-bot-ppp-service.onrender.com/
 
-# 1. Restore persistent pre-seeded SQLite database (Preserves Owner User + Active Workflow)
-echo "💾 Restoring pre-seeded n8n database with persistent Owner session..."
-mkdir -p /root/.n8n
-if [ -f "/app/data/database/n8n_database.sqlite" ]; then
-    cp -f "/app/data/database/n8n_database.sqlite" "/root/.n8n/database.sqlite"
-    echo "✅ Database restored successfully!"
-fi
+# 1. Clean slate migration & Workflow Import
+echo "📥 Importing Zalo AI Agent Workflow into Cloud n8n..."
+n8n import:workflow --input="/app/Function department/zalo_service/zalo_n8n_workflow_template.json" || true
 
 # 2. Start Zalo Bot Python Agent Service in background (Long-Polling 24/7)
 echo "🤖 Starting Zalo Bot Python Agent Service in background..."
