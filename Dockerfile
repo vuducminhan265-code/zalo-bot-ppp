@@ -26,7 +26,7 @@ RUN chmod +x /app/start.sh
 
 # Set environment variables
 ENV PORT=10000
-ENV N8N_PORT=5679
+ENV N8N_PORT=10000
 ENV N8N_HOST=0.0.0.0
 ENV N8N_USER_MANAGEMENT_DISABLED=true
 ENV N8N_BASIC_AUTH_ACTIVE=false
@@ -35,7 +35,7 @@ ENV N8N_VERSION_NOTIFICATIONS_ENABLED=false
 ENV N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
 ENV PYTHONPATH="/app:/app/Function department"
 
-EXPOSE 10000 5679
+EXPOSE 10000
 
 # Start Zalo Bot & Cloud n8n Service
 CMD ["/bin/bash", "/app/start.sh"]

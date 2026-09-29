@@ -3,8 +3,8 @@ echo "=================================================="
 echo "🚀 CLOUD INTEGRATED N8N + ZALO BOT AGENT ENGINE"
 echo "=================================================="
 
-# Export n8n environment variables
-export N8N_PORT=5679
+# Use Render's assigned PORT for n8n native binding
+export N8N_PORT=${PORT:-10000}
 export N8N_HOST=0.0.0.0
 export N8N_LISTEN_ADDRESS=0.0.0.0
 export N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
@@ -16,23 +16,14 @@ export N8N_LOG_LEVEL=info
 export N8N_EDITOR_BASE_URL=https://zalo-bot-ppp-service.onrender.com/
 export WEBHOOK_URL=https://zalo-bot-ppp-service.onrender.com/
 
-# 1. Import Zalo AI Agent workflow BEFORE starting n8n server (prevents SQLite database lock race condition)
+# 1. Import Zalo AI Agent workflow into Cloud n8n database BEFORE starting server
 echo "📥 Importing Zalo AI Agent Workflow into Cloud n8n..."
 n8n import:workflow --input="/app/Function department/zalo_service/zalo_n8n_workflow_template.json" || true
 
-# 2. Auto-restart daemon loop for n8n to guarantee 100% uptime
-run_n8n() {
-    while true; do
-        echo "🔄 Starting n8n daemon on port 5679..."
-        n8n start
-        echo "⚠️ n8n process exited, restarting in 3 seconds..."
-        sleep 3
-    done
-}
+# 2. Start Zalo Bot Python Agent Service in background (Long-Polling 24/7)
+echo "🤖 Starting Zalo Bot Python Agent Service in background..."
+python "Function department/zalo_service/zalo_bot_service.py" &
 
-# Start n8n daemon in background
-run_n8n &
-
-# Start Zalo Bot Python Service
-echo "🤖 Starting Zalo Bot Python Agent Service..."
-exec python "Function department/zalo_service/zalo_bot_service.py"
+# 3. Start n8n as main process directly on PORT (Native Cloud Web App)
+echo "⚡ Starting n8n natively on port ${N8N_PORT}..."
+exec n8n start

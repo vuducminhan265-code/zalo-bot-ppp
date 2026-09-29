@@ -8,88 +8,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from datetime import datetime
 from dotenv import load_dotenv
 
-# Lightweight HTTP Health Check Server for Render / Cloud deployments
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def handle_proxy(self):
-        target_path = self.path
-        if target_path == "/n8n" or target_path == "/n8n/":
-            target_path = "/"
-        elif target_path.startswith("/n8n/"):
-            target_path = target_path[4:]
 
-        target_url = f"http://127.0.0.1:5679{target_path}"
-        headers = {k: v for k, v in self.headers.items() if k.lower() not in ['host', 'content-length']}
-        headers['X-Forwarded-Host'] = self.headers.get('Host', 'zalo-bot-ppp-service.onrender.com')
-        headers['X-Forwarded-Proto'] = 'https'
-
-        body = None
-        content_length = int(self.headers.get('Content-Length', 0))
-        if content_length > 0:
-            body = self.rfile.read(content_length)
-
-        last_err = None
-        for attempt in range(3):
-            try:
-                resp = requests.request(
-                    method=self.command,
-                    url=target_url,
-                    headers=headers,
-                    data=body,
-                    allow_redirects=False,
-                    timeout=15
-                )
-                self.send_response(resp.status_code)
-                for k, v in resp.headers.items():
-                    if k.lower() not in ['content-encoding', 'transfer-encoding', 'content-length']:
-                        self.send_header(k, v)
-                self.end_headers()
-                self.wfile.write(resp.content)
-                return
-            except Exception as e:
-                last_err = e
-                time.sleep(1)
-
-        self.send_response(502)
-        self.send_header('Content-type', 'text/html; charset=utf-8')
-        self.end_headers()
-        self.wfile.write(f"<h1>n8n Server is starting up...</h1><p>Hệ thống n8n trên Cloud đang nạp cơ sở dữ liệu. Vui lòng tải lại trang sau 5 giây. ({last_err})</p>".encode('utf-8'))
-
-    def do_GET(self):
-        self.handle_proxy()
-
-    def do_POST(self):
-        self.handle_proxy()
-
-    def do_PUT(self):
-        self.handle_proxy()
-
-    def do_DELETE(self):
-        self.handle_proxy()
-
-    def do_PATCH(self):
-        self.handle_proxy()
-
-    def do_OPTIONS(self):
-        self.handle_proxy()
-
-    def do_HEAD(self):
-        self.handle_proxy()
-
-    def log_message(self, format, *args):
-        pass
-
-def start_health_server():
-    try:
-        port = int(os.getenv("PORT", "10000"))
-        HTTPServer.allow_reuse_address = True
-        server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
-        print(f"Health check HTTP server listening on port {port}...", flush=True)
-        server.serve_forever()
-    except Exception as e:
-        print(f"Health server notice: {e}", flush=True)
-
-health_thread = threading.Thread(target=start_health_server, daemon=True)
-health_thread.start()
 
 
 # Redirect stdout/stderr to log file if running windowless (pythonw)
@@ -228,9 +147,10 @@ def process_message(msg_obj: dict):
     if ai_query:
         # Try forwarding to n8n Master AI Agent Workflow Webhook
         try:
+            port = os.getenv("PORT", "10000")
             n8n_urls = [
-                "http://127.0.0.1:5679/n8n/webhook/zalo-inbound",
-                "http://127.0.0.1:5679/webhook/zalo-inbound"
+                f"http://127.0.0.1:{port}/webhook/zalo-inbound",
+                f"http://127.0.0.1:{port}/n8n/webhook/zalo-inbound"
             ]
             for n8n_url in n8n_urls:
                 try:
