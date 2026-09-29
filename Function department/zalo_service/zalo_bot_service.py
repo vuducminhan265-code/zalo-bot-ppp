@@ -27,38 +27,45 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def proxy_n8n(self):
-        try:
-            target_path = self.path
-            if target_path == "/n8n" or target_path == "/n8n/":
-                target_path = "/"
-            elif target_path.startswith("/n8n/"):
-                target_path = target_path[4:]
+        target_path = self.path
+        if target_path == "/n8n" or target_path == "/n8n/":
+            target_path = "/"
+        elif target_path.startswith("/n8n/"):
+            target_path = target_path[4:]
 
-            target_url = f"http://127.0.0.1:5678{target_path}"
-            headers = {k: v for k, v in self.headers.items() if k.lower() not in ['host', 'content-length']}
-            body = None
-            content_length = int(self.headers.get('Content-Length', 0))
-            if content_length > 0:
-                body = self.rfile.read(content_length)
+        target_url = f"http://127.0.0.1:5678{target_path}"
+        headers = {k: v for k, v in self.headers.items() if k.lower() not in ['host', 'content-length']}
+        body = None
+        content_length = int(self.headers.get('Content-Length', 0))
+        if content_length > 0:
+            body = self.rfile.read(content_length)
 
-            resp = requests.request(
-                method=self.command,
-                url=target_url,
-                headers=headers,
-                data=body,
-                allow_redirects=False,
-                timeout=10
-            )
-            self.send_response(resp.status_code)
-            for k, v in resp.headers.items():
-                if k.lower() not in ['content-encoding', 'transfer-encoding', 'content-length']:
-                    self.send_header(k, v)
-            self.end_headers()
-            self.wfile.write(resp.content)
-        except Exception as e:
-            self.send_response(502)
-            self.end_headers()
-            self.wfile.write(f"n8n Proxy Notice: {e}".encode())
+        last_err = None
+        for attempt in range(3):
+            try:
+                resp = requests.request(
+                    method=self.command,
+                    url=target_url,
+                    headers=headers,
+                    data=body,
+                    allow_redirects=False,
+                    timeout=10
+                )
+                self.send_response(resp.status_code)
+                for k, v in resp.headers.items():
+                    if k.lower() not in ['content-encoding', 'transfer-encoding', 'content-length']:
+                        self.send_header(k, v)
+                self.end_headers()
+                self.wfile.write(resp.content)
+                return
+            except Exception as e:
+                last_err = e
+                time.sleep(1)
+
+        self.send_response(502)
+        self.send_header('Content-type', 'text/html; charset=utf-8')
+        self.end_headers()
+        self.wfile.write(f"<h1>n8n Server is starting up...</h1><p>Hệ thống n8n trên Cloud đang nạp cơ sở dữ liệu. Vui lòng tải lại trang sau 5 giây. ({last_err})</p>".encode('utf-8'))
 
     def do_HEAD(self):
         self.send_response(200)

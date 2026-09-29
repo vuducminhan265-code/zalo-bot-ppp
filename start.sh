@@ -10,23 +10,26 @@ export N8N_LISTEN_ADDRESS=0.0.0.0
 export N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
 export N8N_DIAGNOSTICS_ENABLED=false
 export N8N_VERSION_NOTIFICATIONS_ENABLED=false
+export N8N_LOG_LEVEL=info
 export N8N_EDITOR_BASE_URL=https://zalo-bot-ppp-service.onrender.com/n8n/
 export WEBHOOK_URL=http://127.0.0.1:5678/
 
-# Start n8n engine in background
-n8n start &
+# Auto-restart daemon loop for n8n to guarantee 100% uptime
+run_n8n() {
+    while true; do
+        echo "🔄 Starting n8n daemon..."
+        n8n start
+        echo "⚠️ n8n process exited, restarting in 3 seconds..."
+        sleep 3
+    done
+}
 
-# Wait 10 seconds for n8n database migration
-echo "⏳ Waiting 10 seconds for n8n initialization..."
-sleep 10
+# Start n8n daemon in background
+run_n8n &
 
-# Automatically create Owner Account via n8n CLI to bypass setup form
-echo "👤 Auto-creating default Owner Account..."
-n8n user:create --email "alexander.vu@gmail.com" --password "Alexander123!" --firstName "Alexander" --lastName "Vu" || true
-
-# Import & activate Zalo AI Agent workflow in n8n
-echo "📥 Importing and activating Zalo AI Agent Workflow in Cloud n8n..."
-n8n import:workflow --input="/app/Function department/zalo_service/zalo_n8n_workflow_template.json" || true
+# Wait for n8n initialization
+echo "⏳ Waiting 8 seconds for n8n server startup..."
+sleep 8
 
 # Start Zalo Bot Python Service
 echo "🤖 Starting Zalo Bot Python Agent Service..."
