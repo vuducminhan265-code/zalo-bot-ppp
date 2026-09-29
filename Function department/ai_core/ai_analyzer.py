@@ -124,8 +124,8 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON DUY NHẤT (không bọc text ngoài
 }}
 """
 
-        # Thử các model Gemini theo thứ tự ưu tiên
-        models_to_try = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-2.5-flash"]
+        # Thử các model Gemini theo thứ tự ưu tiên (Tối ưu Lite Model, tiết kiệm Token)
+        models_to_try = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-flash-lite-latest", "gemini-3.5-flash"]
         
         last_error = None
         for model_name in models_to_try:

@@ -71,7 +71,7 @@ class IntegratedZaloBotAgent:
                 return ""
             prompt = f"{self.get_current_system_context()}\nTrả lời ngắn gọn, chuẩn công vụ, tuyệt đối không suy diễn:\n{user_text}"
             resp = self.client.models.generate_content(
-                model="gemini-flash-latest",
+                model="gemini-3.5-flash-lite",
                 contents=prompt,
                 config=types.GenerateContentConfig(temperature=0.0)
             )
@@ -176,12 +176,12 @@ Yêu cầu trả lời BẮT BUỘC:
 - TUYỆT ĐỐI KHÔNG dùng từ lóng, xưng "bro", "bạn ơi", "tự tìm đi" hay viết các đoạn giải thích phân trần dài dòng trong ngoặc đơn.
 - Trình bày Markdown rõ ràng trên Zalo."""
 
-        # 5. Gemini Synthesis Engine with Low-Temperature (0.0) Zero-Hallucination Config
+        # 5. Gemini Synthesis Engine with Low-Temperature (0.0) Zero-Hallucination Config (Optimized Lite Models Only)
         gen_config = types.GenerateContentConfig(
             temperature=0.0,
             top_p=0.8,
         )
-        models_to_try = ['gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.6-flash', 'gemini-3.7-flash']
+        models_to_try = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-flash-lite-latest', 'gemini-3.5-flash']
         if self.client:
             for m in models_to_try:
                 try:
