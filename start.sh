@@ -3,13 +3,11 @@ echo "=================================================="
 echo "🚀 CLOUD INTEGRATED N8N + ZALO BOT AGENT ENGINE"
 echo "=================================================="
 
-# Export n8n environment variables to bypass login & notifications
+# Export n8n environment variables
 export N8N_PORT=5678
 export N8N_HOST=0.0.0.0
 export N8N_LISTEN_ADDRESS=0.0.0.0
 export N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
-export N8N_USER_MANAGEMENT_DISABLED=true
-export N8N_BASIC_AUTH_ACTIVE=false
 export N8N_DIAGNOSTICS_ENABLED=false
 export N8N_VERSION_NOTIFICATIONS_ENABLED=false
 export N8N_EDITOR_BASE_URL=https://zalo-bot-ppp-service.onrender.com/n8n/
@@ -18,9 +16,13 @@ export WEBHOOK_URL=http://127.0.0.1:5678/
 # Start n8n engine in background
 n8n start &
 
-# Wait 10 seconds for n8n initialization & database migration
+# Wait 10 seconds for n8n database migration
 echo "⏳ Waiting 10 seconds for n8n initialization..."
 sleep 10
+
+# Automatically create Owner Account via n8n CLI to bypass setup form
+echo "👤 Auto-creating default Owner Account..."
+n8n user:create --email "alexander.vu@gmail.com" --password "Alexander123!" --firstName "Alexander" --lastName "Vu" || true
 
 # Import & activate Zalo AI Agent workflow in n8n
 echo "📥 Importing and activating Zalo AI Agent Workflow in Cloud n8n..."
