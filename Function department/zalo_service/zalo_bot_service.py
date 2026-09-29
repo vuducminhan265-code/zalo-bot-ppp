@@ -145,33 +145,33 @@ def process_message(msg_obj: dict):
     # 3. AI Agent Processing (Prioritize n8n Master Workflow, fallback to Python Agent)
     ai_query = raw_text.replace("@Bot PPP Full Service", "").replace("@bot", "").strip()
     if ai_query:
-        # Try forwarding to n8n Master AI Agent Workflow Webhook
+        n8n_handled = False
         try:
             port = os.getenv("PORT", "10000")
             n8n_urls = [
                 f"http://127.0.0.1:{port}/webhook/zalo-webhook",
-                f"http://127.0.0.1:{port}/webhook/zalo-inbound",
-                f"http://127.0.0.1:{port}/n8n/webhook/zalo-webhook",
-                f"http://127.0.0.1:{port}/n8n/webhook/zalo-inbound"
+                f"http://127.0.0.1:{port}/webhook/zalo-inbound"
             ]
             for n8n_url in n8n_urls:
                 try:
                     n8n_resp = requests.post(n8n_url, json={"chat_id": str(chat_id), "text": ai_query, "sender_name": sender_name}, timeout=10)
                     if n8n_resp.status_code == 200 and n8n_resp.text.strip() and "not registered" not in n8n_resp.text:
-                        print(f"--> [n8n Master AI Agent Workflow Handled Successfully via {n8n_url}]", flush=True)
+                        print(f"--> [Forwarded to n8n Master AI Agent Workflow via {n8n_url}]", flush=True)
                         n8n_data = n8n_resp.json()
                         n8n_text = n8n_data.get("output") or n8n_data.get("text") or n8n_data.get("response")
                         if n8n_text:
                             send_zalo_message(chat_id, str(n8n_text))
-                        return
+                        n8n_handled = True
+                        break
                 except Exception:
                     continue
         except Exception as e:
             print(f"⚠️ [n8n Webhook Forwarding Notice]: {e}", flush=True)
 
-        print(f"--> Gửi Gemini (kèm context memory {chat_id}): '{ai_query}'", flush=True)
-        ai_ans = call_gemini(str(chat_id), ai_query, sender_name=sender_name)
-        send_zalo_message(chat_id, ai_ans)
+        if not n8n_handled:
+            print(f"--> Gửi Gemini Python Fallback (kèm context memory {chat_id}): '{ai_query}'", flush=True)
+            ai_ans = call_gemini(str(chat_id), ai_query, sender_name=sender_name)
+            send_zalo_message(chat_id, ai_ans)
 
 def start_bot_service():
     print("==================================================", flush=True)
