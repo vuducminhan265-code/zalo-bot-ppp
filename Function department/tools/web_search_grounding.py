@@ -133,35 +133,24 @@ class WebSearchGrounder:
         if any(k in q_lower for k in legal_keywords):
             is_specialized = True
             legal_q = clean_q.replace('/', ' ')
-            results = self.search_duckduckgo_lite(f"{legal_q} site:thuvienphapluat.vn")
-            if not results:
-                results = self.search_duckduckgo_lite(f"{legal_q} thuvienphapluat.vn")
+            results = self.search_google_news_rss(f"{legal_q} thuvienphapluat")
+            ddg_res = self.search_duckduckgo_lite(f"{legal_q} site:thuvienphapluat.vn")
+            if ddg_res:
+                results.extend(ddg_res)
             if not results:
                 results = self.search_duckduckgo_lite(f"{legal_q} chinhphu.vn")
         elif any(k in q_lower for k in stock_keywords):
             is_specialized = True
-            search_q = f"{clean_q} CafeF Vietstock" if "giá cổ phiếu" in clean_q.lower() else f"giá cổ phiếu {clean_q} CafeF Vietstock"
-            results = self.search_duckduckgo_lite(search_q)
-            if not results:
-                results = self.search_google_news_rss(f"giá cổ phiếu {clean_q}")
+            rss_q = clean_q if "giá cổ phiếu" in clean_q.lower() else f"giá cổ phiếu {clean_q}"
+            results = self.search_google_news_rss(rss_q)
+            ddg_q = f"{clean_q} CafeF Vietstock" if "giá cổ phiếu" in clean_q.lower() else f"giá cổ phiếu {clean_q} CafeF Vietstock"
+            ddg_res = self.search_duckduckgo_lite(ddg_q)
+            if ddg_res:
+                results.extend(ddg_res)
         elif any(k in q_lower for k in sports_keywords) or any(k in q_lower for k in ["inter miami", "messi", "ronaldo", "man utd", "real madrid", "barcelona"]):
             is_specialized = True
-            team_map = {
-                "na uy": "Norway", "norway": "Norway",
-                "đan mạch": "Denmark", "dan mach": "Denmark",
-                "bồ": "Portugal", "bồ đào nha": "Portugal",
-                "ý": "Italy", "italia": "Italy",
-                "bỉ": "Belgium", "anh": "England",
-                "tbn": "Spain", "tây ban nha": "Spain",
-                "pháp": "France", "đức": "Germany", "hà lan": "Netherlands",
-                "inter miami": "Inter Miami MLS"
-            }
-            eng_q = clean_q
-            for vn_name, en_name in team_map.items():
-                eng_q = re.sub(rf'\b{vn_name}\b', en_name, eng_q, flags=re.IGNORECASE)
-            
-            results = self.search_google_news_rss(query)
-            ddg_res = self.search_duckduckgo_lite(f"{eng_q} match result score")
+            results = self.search_google_news_rss(clean_q)
+            ddg_res = self.search_duckduckgo_lite(f"{clean_q} match result score")
             if ddg_res:
                 results.extend(ddg_res)
             if not results:

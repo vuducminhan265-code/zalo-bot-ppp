@@ -20,6 +20,7 @@ export N8N_WEBHOOK_URL=https://zalo-bot-ppp-service.onrender.com/
 # 1. Clean slate migration & Workflow Import
 echo "📥 Importing Zalo AI Agent Workflow into Cloud n8n..."
 n8n import:workflow --input="/app/Function department/zalo_service/zalo_n8n_workflow_template.json" || true
+n8n update:workflow --all --active=true || true
 
 # 2. Start Zalo Bot Python Agent Service in background (Long-Polling 24/7)
 echo "🤖 Starting Zalo Bot Python Agent Service in background..."
