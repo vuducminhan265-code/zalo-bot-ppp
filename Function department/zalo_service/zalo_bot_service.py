@@ -24,6 +24,7 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
 def start_health_server():
     try:
         port = int(os.getenv("PORT", "10000"))
+        HTTPServer.allow_reuse_address = True
         server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
         print(f"Health check HTTP server listening on port {port}...", flush=True)
         server.serve_forever()
