@@ -15,6 +15,25 @@
   + Nghị định số 243/2025/NĐ-CP: Quy định chi tiết thi hành Luật PPP và hợp đồng BOT/BT.
   + Nghị định số 257/2025/NĐ-CP: Quy định cơ chế bù trừ, sử dụng quỹ đất thanh toán dự án BT.
 
+#### CÁC NGHỊ ĐỊNH HƯỚNG DẪN CHI TIẾT LUẬT PPP & HỢP ĐỒNG BOT/BT:
+
+##### NGHỊ ĐỊNH SỐ 243/2025/NĐ-CP (Quy định chi tiết thi hành Luật Đầu tư theo phương thức đối tác công tư):
+- **Cơ quan ban hành:** Chính phủ
+- **Điều 65 - Quy trình Thẩm định Phương án tài chính, Kiểm soát thanh toán & Nghiệm thu Quyết toán dự án BOT/BT:**
+  1. Cơ quan ký kết hợp đồng PPP phối hợp với Sở Tài chính thẩm định phương án tài chính, tổng vốn đầu tư, cơ cấu vốn chủ sở hữu và vốn huy động hợp pháp của nhà đầu tư.
+  2. Việc nghiệm thu hoàn thành công trình dự án BOT/BT phải dựa trên biên bản nghiệm thu chất lượng công trình, xác nhận giá trị khối lượng thực hiện hoàn thành theo tiến độ quy định tại Hợp đồng PPP.
+  3. Hồ sơ nghiệm thu quyết toán vốn đầu tư hoàn thành dự án BOT/BT bao gồm:
+     a) Báo cáo kiểm toán độc lập về chi phí đầu tư thực hiện dự án;
+     b) Văn bản nghiệm thu chất lượng công trình của cơ quan chuyên môn về xây dựng;
+     c) Tờ trình đề nghị phê duyệt quyết toán vốn đầu tư hoàn thành của Doanh nghiệp dự án PPP.
+  4. Cơ quan nhà nước có thẩm quyền thực hiện kiểm tra, rà soát chi phí đầu tư hợp pháp, thanh toán nguồn vốn ngân sách nhà nước hỗ trợ hoặc bù trừ giá trị quỹ đất thanh toán cho dự án BT theo đúng quy định tại Hợp đồng dự án và pháp luật ngân sách nhà nước.
+
+##### NGHỊ ĐỊNH SỐ 257/2025/NĐ-CP (Cơ chế tài chính, thanh toán và cân đối quỹ đất đối với dự án Hợp đồng BT):
+- **Cơ quan ban hành:** Chính phủ
+- **Điều 6 & Điều 19 - Cơ chế thanh toán bằng quỹ đất & Bù trừ chênh lệch giá trị công trình BT:**
+  1. Quỹ đất thanh toán cho Nhà đầu tư thực hiện dự án BT được xác định trong Phương án tài chính và Quyết định phê duyệt dự án đầu tư.
+  2. Việc xác định giá trị công trình BT và giá trị quỹ đất thanh toán được thực hiện theo nguyên tắc ngang giá, bù trừ chênh lệch tại thời điểm thanh toán. Cơ quan tài chính thẩm định phương án bù trừ trình UBND Tỉnh/Thành phố quyết định.
+
 ### 3. LUẬT ĐẤU THẦU
 - **Số ký hiệu văn bản:** Luật số 22/2023/QH15
 - **Trích yếu:** Quy định quản lý nhà nước về hoạt động lựa chọn nhà đầu tư thực hiện dự án PPP và dự án đầu tư có sử dụng đất.

@@ -54,7 +54,6 @@ class TaskAIAnalyzer:
                 return "\n".join([p.text for p in doc.paragraphs if p.text])
             except Exception:
                 pass
-            # Binary decode fallback for .doc
             try:
                 with open(file_path, "rb") as f:
                     raw = f.read()
@@ -62,6 +61,19 @@ class TaskAIAnalyzer:
                 matches = re.findall(r"[\w\s,.:;/–—\(\)\-]{10,}", text_utf16)
                 if matches:
                     return " ".join(matches)
+            except Exception:
+                pass
+        elif ext in [".xlsx", ".xls"]:
+            try:
+                import openpyxl
+                wb = openpyxl.load_workbook(file_path, data_only=True)
+                lines = []
+                for sheet in wb.worksheets[:3]:
+                    for row in sheet.iter_rows(values_only=True):
+                        row_vals = [str(val) for val in row if val is not None]
+                        if row_vals:
+                            lines.append(" | ".join(row_vals))
+                return "\n".join(lines[:200])
             except Exception:
                 pass
         return ""

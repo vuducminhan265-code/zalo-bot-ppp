@@ -140,8 +140,10 @@ class WebSearchGrounder:
                 results = self.search_duckduckgo_lite(f"{legal_q} chinhphu.vn")
         elif any(k in q_lower for k in stock_keywords):
             is_specialized = True
-            search_q = f"giá cổ phiếu {clean_q} CafeF Vietstock 2026"
+            search_q = f"{clean_q} CafeF Vietstock" if "giá cổ phiếu" in clean_q.lower() else f"giá cổ phiếu {clean_q} CafeF Vietstock"
             results = self.search_duckduckgo_lite(search_q)
+            if not results:
+                results = self.search_google_news_rss(f"giá cổ phiếu {clean_q}")
         elif any(k in q_lower for k in sports_keywords) or any(k in q_lower for k in ["inter miami", "messi", "ronaldo", "man utd", "real madrid", "barcelona"]):
             is_specialized = True
             team_map = {
