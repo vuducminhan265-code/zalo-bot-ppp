@@ -1,4 +1,9 @@
+import os
+import sqlite3
+import json
+import uuid
 import base64
+from datetime import datetime
 
 DEFAULT_KEY = base64.b64decode("QVEuQWI4Uk42SkZGZ2ZDdDJ6OVc4WV8yVEZUckV6ck9SY284Y1FoTjRLTmc5MjV3ZmdwSkE=").decode()
 GEMINI_KEY = os.getenv("GEMINI_API_KEY", DEFAULT_KEY)
