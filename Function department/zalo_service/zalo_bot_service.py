@@ -149,7 +149,9 @@ def process_message(msg_obj: dict):
         try:
             port = os.getenv("PORT", "10000")
             n8n_urls = [
+                f"http://127.0.0.1:{port}/webhook/zalo-webhook",
                 f"http://127.0.0.1:{port}/webhook/zalo-inbound",
+                f"http://127.0.0.1:{port}/n8n/webhook/zalo-webhook",
                 f"http://127.0.0.1:{port}/n8n/webhook/zalo-inbound"
             ]
             for n8n_url in n8n_urls:
