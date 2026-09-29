@@ -24,10 +24,11 @@ COPY . .
 # Grant execution rights to start script
 RUN chmod +x /app/start.sh
 
-# Set environment variables to bypass login screens
+# Set environment variables with N8N_PATH_PREFIX
 ENV PORT=10000
 ENV N8N_PORT=5679
 ENV N8N_HOST=0.0.0.0
+ENV N8N_PATH_PREFIX=/n8n/
 ENV N8N_USER_MANAGEMENT_DISABLED=true
 ENV N8N_BASIC_AUTH_ACTIVE=false
 ENV N8N_DIAGNOSTICS_ENABLED=false

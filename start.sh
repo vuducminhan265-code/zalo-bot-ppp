@@ -3,7 +3,7 @@ echo "=================================================="
 echo "🚀 CLOUD INTEGRATED N8N + ZALO BOT AGENT ENGINE"
 echo "=================================================="
 
-# Export n8n environment variables to dedicated port 5679 (avoiding collision with Render's PORT)
+# Export n8n environment variables with official subpath prefix /n8n/
 export N8N_PORT=5679
 export N8N_HOST=0.0.0.0
 export N8N_LISTEN_ADDRESS=0.0.0.0
@@ -13,13 +13,14 @@ export N8N_BASIC_AUTH_ACTIVE=false
 export N8N_DIAGNOSTICS_ENABLED=false
 export N8N_VERSION_NOTIFICATIONS_ENABLED=false
 export N8N_LOG_LEVEL=info
+export N8N_PATH_PREFIX=/n8n/
 export N8N_EDITOR_BASE_URL=https://zalo-bot-ppp-service.onrender.com/n8n/
-export WEBHOOK_URL=http://127.0.0.1:5679/
+export WEBHOOK_URL=https://zalo-bot-ppp-service.onrender.com/n8n/
 
 # Auto-restart daemon loop for n8n to guarantee 100% uptime
 run_n8n() {
     while true; do
-        echo "🔄 Starting n8n daemon on port 5679..."
+        echo "🔄 Starting n8n daemon on port 5679 with N8N_PATH_PREFIX=/n8n/..."
         n8n start
         echo "⚠️ n8n process exited, restarting in 3 seconds..."
         sleep 3

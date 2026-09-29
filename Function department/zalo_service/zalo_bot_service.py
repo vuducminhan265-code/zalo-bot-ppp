@@ -28,10 +28,11 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
 
     def proxy_n8n(self):
         target_path = self.path
-        if target_path == "/n8n" or target_path == "/n8n/":
-            target_path = "/"
-        elif target_path.startswith("/n8n/"):
-            target_path = target_path[4:]
+        if target_path == "/n8n":
+            self.send_response(301)
+            self.send_header('Location', '/n8n/')
+            self.end_headers()
+            return
 
         target_url = f"http://127.0.0.1:5679{target_path}"
         headers = {k: v for k, v in self.headers.items() if k.lower() not in ['host', 'content-length']}
@@ -224,18 +225,22 @@ def process_message(msg_obj: dict):
     if ai_query:
         # Try forwarding to n8n Master AI Agent Workflow Webhook
         try:
-            n8n_url = "http://127.0.0.1:5679/webhook/zalo-inbound"
-            n8n_resp = requests.post(n8n_url, json={"chat_id": str(chat_id), "text": ai_query, "sender_name": sender_name}, timeout=15)
-            if n8n_resp.status_code == 200 and n8n_resp.text.strip() and not "not registered" in n8n_resp.text:
-                print(f"--> [n8n Master AI Agent Workflow Handled Successfully]", flush=True)
+            n8n_urls = [
+                "http://127.0.0.1:5679/n8n/webhook/zalo-inbound",
+                "http://127.0.0.1:5679/webhook/zalo-inbound"
+            ]
+            for n8n_url in n8n_urls:
                 try:
-                    n8n_data = n8n_resp.json()
-                    n8n_text = n8n_data.get("output") or n8n_data.get("text") or n8n_data.get("response")
-                    if n8n_text:
-                        send_zalo_message(chat_id, str(n8n_text))
+                    n8n_resp = requests.post(n8n_url, json={"chat_id": str(chat_id), "text": ai_query, "sender_name": sender_name}, timeout=10)
+                    if n8n_resp.status_code == 200 and n8n_resp.text.strip() and "not registered" not in n8n_resp.text:
+                        print(f"--> [n8n Master AI Agent Workflow Handled Successfully via {n8n_url}]", flush=True)
+                        n8n_data = n8n_resp.json()
+                        n8n_text = n8n_data.get("output") or n8n_data.get("text") or n8n_data.get("response")
+                        if n8n_text:
+                            send_zalo_message(chat_id, str(n8n_text))
+                        return
                 except Exception:
-                    pass
-                return
+                    continue
         except Exception as e:
             print(f"⚠️ [n8n Webhook Forwarding Notice]: {e}", flush=True)
 
