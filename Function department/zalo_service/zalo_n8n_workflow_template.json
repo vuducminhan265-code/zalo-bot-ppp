@@ -31,6 +31,8 @@
     },
     {
       "parameters": {
+        "promptType": "custom",
+        "text": "={{ $json.body?.message?.text || $json.body?.text || $json.text || $json.body?.result?.message?.text || 'Xin chào' }}",
         "options": {
           "systemMessage": "Bạn là Trợ lý AI cao cấp của phòng Hợp tác Công tư & Quản lý Nợ (PPP & QLN), Sở Tài chính TP.HCM.\n- Đi thẳng vào trọng tâm, súc tích, logic, chính xác.\n- Tự động dùng công cụ 'Google Web Search Grounding' khi được hỏi về các sự kiện thời sự, tin tức mới, giá cổ phiếu, giá vàng, thể thao và quy định pháp luật mới.\n- Tự động dùng công cụ 'NotebookLM Knowledge Base' khi được hỏi về quy định pháp luật PPP, Nghị định 243/312, cơ chế tài chính BT/BOT.\n- Tự động dùng công cụ 'Google Sheets Task Reminders' khi được yêu cầu nhắc việc hoặc báo cáo tiến độ nhiệm vụ."
         }
@@ -107,7 +109,7 @@
         "url": "https://bot-api.zaloplatforms.com/bot1175912593990733827:IQHQDAkiFOfwODzTmEKdPvfCSbDJubszVeLXcvxwqTSZXPbNaBaTLYQAmeXpAWMX/sendMessage",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"chat_id\": \"{{ $('Zalo Webhook Inbound').item.json.body.result.message.chat.id }}\",\n  \"text\": \"{{ $json.output }}\",\n  \"parse_mode\": \"markdown\"\n}",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $('Zalo Webhook Inbound').item.json.body?.chat_id || $('Zalo Webhook Inbound').item.json.body?.sender?.id || $('Zalo Webhook Inbound').item.json.body?.result?.message?.chat?.id || $('Zalo Webhook Inbound').item.json.chat_id }}\",\n  \"text\": \"{{ $json.output }}\",\n  \"parse_mode\": \"markdown\"\n}",
         "options": {}
       },
       "id": "send-zalo-reply",
