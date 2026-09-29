@@ -8,6 +8,7 @@ export N8N_PORT=5678
 export N8N_HOST=0.0.0.0
 export N8N_LISTEN_ADDRESS=0.0.0.0
 export N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
+export N8N_EDITOR_BASE_URL=https://zalo-bot-ppp-service.onrender.com/n8n/
 export WEBHOOK_URL=http://127.0.0.1:5678/
 
 # Start n8n engine in background

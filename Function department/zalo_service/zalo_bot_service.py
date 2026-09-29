@@ -11,13 +11,59 @@ from dotenv import load_dotenv
 # Lightweight HTTP Health Check Server for Render / Cloud deployments
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
+        if any(self.path.startswith(p) for p in ["/n8n", "/rest", "/assets", "/static", "/favicon", "/types"]):
+            self.proxy_n8n()
+            return
         self.send_response(200)
         self.send_header('Content-type', 'text/html; charset=utf-8')
         self.end_headers()
-        self.wfile.write(b"Zalo Bot PPP Service is Running 24/7!")
+        self.wfile.write(b"<h1>Zalo Bot PPP Service is Running 24/7!</h1><p>Truy cap n8n Editor UI tai: <a href='/n8n/'>https://zalo-bot-ppp-service.onrender.com/n8n/</a></p>")
+
+    def do_POST(self):
+        if any(self.path.startswith(p) for p in ["/n8n", "/rest", "/webhook", "/assets", "/static"]):
+            self.proxy_n8n()
+            return
+        self.send_response(405)
+        self.end_headers()
+
+    def proxy_n8n(self):
+        try:
+            target_path = self.path
+            if target_path == "/n8n" or target_path == "/n8n/":
+                target_path = "/"
+            elif target_path.startswith("/n8n/"):
+                target_path = target_path[4:]
+
+            target_url = f"http://127.0.0.1:5678{target_path}"
+            headers = {k: v for k, v in self.headers.items() if k.lower() not in ['host', 'content-length']}
+            body = None
+            content_length = int(self.headers.get('Content-Length', 0))
+            if content_length > 0:
+                body = self.rfile.read(content_length)
+
+            resp = requests.request(
+                method=self.command,
+                url=target_url,
+                headers=headers,
+                data=body,
+                allow_redirects=False,
+                timeout=10
+            )
+            self.send_response(resp.status_code)
+            for k, v in resp.headers.items():
+                if k.lower() not in ['content-encoding', 'transfer-encoding', 'content-length']:
+                    self.send_header(k, v)
+            self.end_headers()
+            self.wfile.write(resp.content)
+        except Exception as e:
+            self.send_response(502)
+            self.end_headers()
+            self.wfile.write(f"n8n Proxy Notice: {e}".encode())
+
     def do_HEAD(self):
         self.send_response(200)
         self.end_headers()
+
     def log_message(self, format, *args):
         pass
 
