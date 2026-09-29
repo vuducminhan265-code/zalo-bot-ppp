@@ -86,16 +86,49 @@
     },
     {
       "parameters": {
-        "name": "Legal_RAG_Vector_Search",
-        "description": "Tra cứu kho 10 văn bản quy phạm pháp luật PPP, Nghị định 243/2025, Nghị định 257/2025, Luật Đấu thầu, Luật Đất đai trích xuất chính xác theo từng Điều/Khoản.",
-        "language": "javaScript",
-        "jsCode": "const query = $fromAI('query', 'Điều khoản hoặc từ khóa quy định pháp luật cần tra cứu');\nreturn JSON.stringify({ action: 'rag_legal_search', query: query });"
+        "name": "Legal_Knowledge_Vector_Store",
+        "description": "Tra cứu kho dữ liệu 23 lĩnh vực văn bản quy phạm pháp luật và chính sách đặc thù (Luật PPP, NĐ 243, NĐ 257, NĐ 274, NQ 98, NQ 260, Đất đai, Đấu thầu, Xây dựng, Đầu tư công...) trích xuất chính xác theo từng Điều/Khoản."
       },
-      "id": "tool-legal-rag",
-      "name": "Legal RAG Vector Search (10 Luật & NĐ)",
-      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "id": "tool-vector-store",
+      "name": "Legal Knowledge Vector Store (23 Lĩnh vực Luật)",
+      "type": "@n8n/n8n-nodes-langchain.toolVectorStore",
       "typeVersion": 1,
       "position": [740, 600]
+    },
+    {
+      "parameters": {},
+      "id": "vector-store-memory",
+      "name": "In-Memory Vector Store",
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreInMemory",
+      "typeVersion": 1,
+      "position": [740, 800]
+    },
+    {
+      "parameters": {
+        "modelName": "models/embedding-001"
+      },
+      "credentials": {
+        "googlePalmApi": {
+          "id": "1",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      },
+      "id": "gemini-embeddings",
+      "name": "Embeddings Google Gemini",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1,
+      "position": [640, 980]
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value": "={{ $json.body?.message?.text || $json.body?.text || '' }}"
+      },
+      "id": "doc-loader",
+      "name": "Document Default Data Loader",
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1,
+      "position": [840, 980]
     },
     {
       "parameters": {
@@ -202,12 +235,45 @@
         ]
       ]
     },
-    "Legal RAG Vector Search (10 Luật & NĐ)": {
+    "Legal Knowledge Vector Store (23 Lĩnh vực Luật)": {
       "ai_tool": [
         [
           {
             "node": "AI Agent (Gemini + Multi-Tools)",
             "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "In-Memory Vector Store": {
+      "ai_vectorStore": [
+        [
+          {
+            "node": "Legal Knowledge Vector Store (23 Lĩnh vực Luật)",
+            "type": "ai_vectorStore",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings Google Gemini": {
+      "ai_embedding": [
+        [
+          {
+            "node": "In-Memory Vector Store",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Document Default Data Loader": {
+      "ai_document": [
+        [
+          {
+            "node": "In-Memory Vector Store",
+            "type": "ai_document",
             "index": 0
           }
         ]
