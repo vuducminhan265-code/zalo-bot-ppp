@@ -95,8 +95,12 @@ except Exception:
     bot_agent = IntegratedZaloBotAgent(api_key=GEMINI_API_KEY)
 
 def call_gemini(chat_id: str, prompt: str, sender_name: str = "Chuyên viên") -> str:
-    """Gọi Integrated Zalo Bot Agent với Real-time Metadata, Web Search Grounding, RAG và Workspace Tasks."""
-    return bot_agent.process_message(prompt, sender_name=sender_name)
+    """Gọi Integrated Zalo Bot Agent với Real-time Metadata, Web Search Grounding, RAG và Workspace Tasks kèm Memory."""
+    history = get_chat_history(chat_id)
+    answer = bot_agent.process_message(prompt, sender_name=sender_name, chat_history=history)
+    add_chat_message(chat_id, "user", prompt)
+    add_chat_message(chat_id, "model", answer)
+    return answer
 
 def send_zalo_message(chat_id: str, text: str):
     """Gửi tin nhắn phản hồi qua Zalo Bot API có hỗ trợ parse_mode markdown."""

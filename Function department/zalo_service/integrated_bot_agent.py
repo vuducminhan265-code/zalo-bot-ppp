@@ -82,10 +82,12 @@ class IntegratedZaloBotAgent:
         return ""
 
     def get_current_system_context(self) -> str:
-        now = datetime.now()
+        from datetime import datetime, timezone, timedelta
+        vn_tz = timezone(timedelta(hours=7))
+        now = datetime.now(vn_tz)
         day_names = ["Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy", "Chủ Nhật"]
         day_vn = day_names[now.weekday()]
-        return f"[CURRENT SYSTEM METADATA]: Hôm nay là {day_vn}, ngày {now.strftime('%d/%m/%Y')}. Thời gian thực tế hiện tại là {now.strftime('%H:%M:%S')} (Múi giờ UTC+7, TP.Hồ Chí Minh, Việt Nam)."
+        return f"Hôm nay là {day_vn}, ngày {now.strftime('%d/%m/%Y')}. Thời gian thực tế hiện tại là {now.strftime('%H:%M:%S')} (Múi giờ UTC+7, TP.Hồ Chí Minh, Việt Nam)."
 
     def query_notebooklm(self, question: str, notebook_id: str = "learning-ppp") -> str:
         """Cloud-native knowledge base query fallback."""
@@ -98,8 +100,8 @@ class IntegratedZaloBotAgent:
                 print(f"⚠️ [RAG Query Exception]: {e}", flush=True)
         return ""
 
-    def process_message(self, user_text: str, sender_name: str = "Chuyên viên", file_attachment_path: str = None) -> str:
-        """Processes incoming Zalo messages via 100% Cloud-Native Agent pipeline."""
+    def process_message(self, user_text: str, sender_name: str = "Chuyên viên", file_attachment_path: str = None, chat_history: list = None) -> str:
+        """Processes incoming Zalo messages via 100% Cloud-Native Agent pipeline with stateful context."""
         system_time_context = self.get_current_system_context()
         text_lower = user_text.lower() if user_text else ""
 
@@ -123,9 +125,9 @@ class IntegratedZaloBotAgent:
                         resp.append(f"🔴 Lý do sai lệch: {review_res.get('discrepancy_reason')}")
                     return "\n".join(resp)
 
-        # 2. Google Workspace Task Query Workflow (Complete accented & unaccented keywords)
-        task_keywords = ["/nhacviec", "nhacviec", "nhac việc", "nhắc việc", "nhac_viec", "/tasks", "tasks", "task", "/tiendo", "tiendo", "tien do", "tiến độ", "nhiệm vụ", "nhiem vu", "báo cáo tiến độ", "bao cao tien do", "danh sách task", "google sheet"]
-        if any(k in text_lower for k in task_keywords):
+        # 2. Google Workspace Task Query Workflow (Strict template triggers)
+        task_template_triggers = ["/nhacviec", "nhacviec", "nhac việc", "/tasks", "/tiendo", "danh sách task", "báo cáo tiến độ", "bao cao tien do"]
+        if any(k in text_lower for k in task_template_triggers):
             if self.workspace_fetcher:
                 return self.workspace_fetcher.generate_formatted_reminder()
 
@@ -133,13 +135,23 @@ class IntegratedZaloBotAgent:
         if text_lower in ["/time", "mấy giờ rồi", "bây giờ là mấy giờ"]:
             return f"⏰ {system_time_context}\n\nZalo Bot luôn hoạt động trên thời gian thực mới nhất."
 
-        # 4. Multi-Engine Web Search Grounding (Live Internet Search)
+        # 4. Context Grounding Assembly
         web_context = ""
+
+        # A. Always inject Live Google Workspace Tasks Context into prompt
+        if self.workspace_fetcher:
+            try:
+                live_tasks_summary = self.workspace_fetcher.generate_formatted_reminder()
+                web_context += f"\n\n--- DỮ LIỆU BẢNG GIAO VIỆC GOOGLE WORKSPACE (LIVE TASKS DATA) ---\n{live_tasks_summary}\n"
+            except Exception as e:
+                print(f"Notice: Live tasks injection error -> {e}")
+
+        # B. Multi-Engine Web Search Grounding (Live Internet Search)
         search_res = self.web_grounder.ground_query(user_text) if self.web_grounder else {"has_results": False}
         if search_res.get("has_results"):
-            web_context = f"\n\n--- DỮ LIỆU TÌM KIẾM WEB THỰC TẾ TRỰC TUYẾN (GROUNDING) ---\n{search_res['grounded_context']}"
+            web_context += f"\n\n--- DỮ LIỆU TÌM KIẾM WEB THỰC TẾ TRỰC TUYẾN (GROUNDING) ---\n{search_res['grounded_context']}\n"
 
-        # Internal Department & Administrative Knowledge Base
+        # C. Internal Department & Administrative Knowledge Base
         dept_knowledge = """
 --- THÔNG TIN NỘI BỘ PHÒNG HỢP TÁC CÔNG TƯ VÀ QUẢN LÝ NỢ (SỞ TÀI CHÍNH TP.HCM) ---
 - Trưởng phòng: Bà Tô Thị Kim Thoa (Chị Thoa).
@@ -148,7 +160,7 @@ class IntegratedZaloBotAgent:
 """
         web_context += dept_knowledge
 
-        # Local Document RAG Retrieval
+        # D. Local Document RAG Retrieval
         if self.rag_pipeline and hasattr(self.rag_pipeline, "retriever") and self.rag_pipeline.retriever:
             try:
                 rag_chunks = self.rag_pipeline.retriever.search(user_text, top_k=3)
@@ -160,6 +172,17 @@ class IntegratedZaloBotAgent:
             except Exception:
                 pass
 
+        # E. Conversation History Memory Context
+        if chat_history:
+            history_str = "\n\n--- LỊCH SỬ HỘI THOẠI GẦN ĐÂY --- \n"
+            for item in chat_history[-6:]:
+                role = "Chuyên viên" if item.get("role") == "user" else "Zalo Bot"
+                parts = item.get("parts", [{}])
+                txt = parts[0].get("text", "") if parts else ""
+                if txt:
+                    history_str += f"{role}: {txt[:300]}\n"
+            web_context += history_str
+
         prompt = f"""{system_time_context}
 Bạn là Trợ lý AI Thông minh (Zalo Bot AI) của Phòng Hợp tác Công tư và Quản lý Nợ - Sở Tài chính TP.HCM.
 Xưng hô chuẩn công vụ: Bắt đầu câu trả lời bằng "Dạ chào Anh/Chị chuyên viên,".
@@ -167,11 +190,10 @@ Thành viên: {sender_name} hỏi: "{user_text}"
 {web_context}
 
 Yêu cầu trả lời BẮT BUỘC:
-- TUYỆT ĐỐI KHÔNG SUY DIỄN THÔNG TIN KHI CHƯA CÓ CĂN CỨ VĂN BẢN HOẶC DỮ LIỆU WEB THỰC TẾ.
-- TUYỆT ĐỐI KHÔNG TỰ BỊA TỶ SỐ THỂ THAO, CON SỐ TÀI CHÍNH, GIÁ CỔ PHIẾU HAY NỘI DUNG VĂN BẢN KHI DỮ LIỆU TÌM KIẾM HOẶC KHO TÀI LIỆU CHƯA CÓ XÁC THỰC.
-- Nếu là câu hỏi về tỷ số / kết quả thể thao / số liệu: CHỈ ĐƯỢC trích dẫn đúng dữ liệu tìm kiếm web thực tế ở trên. Nếu dữ liệu web chưa có kết quả trận đấu, trả lời rõ: "Dạ hiện tại dữ liệu trực tuyến chưa cập nhật kết quả chính thức của trận đấu này."
-- Nếu là câu hỏi về thuật ngữ / mã số hồ sơ (như "Sai 65" hoặc mã dự án) chưa có thông tin trong kho văn bản, hãy ghi rõ phạm vi hoặc hỏi lại chuyên viên để làm rõ context, tuyệt đối không tự bịa định nghĩa hay suy đoán ngoài hồ sơ.
-- TUYỆT ĐỐI KHÔNG in ra các thẻ hệ thống như [CURRENT SYSTEM METADATA] hay các dòng cấu hình nội bộ ra tin nhắn trả lời người dùng.
+- ĐỐI VỚI CÁC CÂU HỎI VỀ TIẾN ĐỘ, CON SỐ, HOẶC NHIỆM VỤ CỦA CHUYÊN VIÊN (như "anh Hận còn mấy cái chưa xong", "anh Hòa có task gì"): BẮT BUỘC đọc và trích dẫn trực tiếp dữ liệu từ mục 'DỮ LIỆU BẢNG GIAO VIỆC GOOGLE WORKSPACE (LIVE TASKS DATA)' ở trên để trả lời chính xác số lượng, tên nhiệm vụ và hạn hoàn thành.
+- TUYỆT ĐỐI KHÔNG SUY DIỄN THÔNG TIN KHI CHƯA CÓ CĂN CỨ VĂN BẢN HOẶC DỮ LIỆU THỰC TẾ.
+- TUYỆT ĐỐI KHÔNG TỰ BỊA TỶ SỐ THỂ THAO, CON SỐ TÀI CHÍNH HAY NỘI DUNG VĂN BẢN KHI DỮ LIỆU TÌM KIẾM CHƯA CÓ KẾT QUẢ CỤ THỂ. Nếu thông tin trận đấu/tin tức chưa có trong dữ liệu tìm kiếm web ở trên, BẮT BUỘC trả lời: "Dạ chào Anh/Chị chuyên viên, hiện tại dữ liệu trực tuyến chưa cập nhật kết quả chính thức cho thông tin này. Anh/Chị có thể thử lại sau hoặc cung cấp thêm thông tin chi tiết ạ."
+- TUYỆT ĐỐI KHÔNG in ra các thẻ hệ thống hay dòng cấu hình nội bộ.
 - Luôn giữ thái độ lịch sự, chuyên nghiệp, chuẩn mực văn phong hành chính nhà nước.
 - TUYỆT ĐỐI KHÔNG dùng từ lóng, xưng "bro", "bạn ơi", "tự tìm đi" hay viết các đoạn giải thích phân trần dài dòng trong ngoặc đơn.
 - Trình bày Markdown rõ ràng trên Zalo."""
