@@ -124,7 +124,10 @@
     {
       "parameters": {
         "dataType": "json",
-        "options": {}
+        "mode": "all",
+        "options": {
+          "dataPropertyName": "text"
+        }
       },
       "id": "doc-loader",
       "name": "Document Default Data Loader",
