@@ -380,15 +380,14 @@ def start_bot_service():
     print(f"⏰ Khởi động lúc: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", flush=True)
     print("==================================================", flush=True)
     
-    # 1. Khởi chạy HTTP Server cho Render Port Scanner
-    t_http = threading.Thread(target=run_http_health_server, daemon=True)
-    t_http.start()
+    # 1. Khởi chạy HTTP Server & Keep-Alive ONLY khi ở chế độ CLOUD
+    if mode in ["bot1_only", "cloud"] or os.getenv("RENDER"):
+        t_http = threading.Thread(target=run_http_health_server, daemon=True)
+        t_http.start()
+        t_ping = threading.Thread(target=keep_alive_ping, daemon=True)
+        t_ping.start()
 
-    # 2. Khởi chạy Keep-Alive Self Ping
-    t_ping = threading.Thread(target=keep_alive_ping, daemon=True)
-    t_ping.start()
-
-    # 3. Kích hoạt Bot theo chế độ RUN_MODE (bot1_only, bot2_only, hoặc dual)
+    # 2. Kích hoạt Bot theo chế độ RUN_MODE (bot1_only, bot2_only, hoặc dual)
     if mode in ["bot1_only", "cloud"]:
         print("📌 Chạy chế độ CLOUD: Chỉ vận hành Bot 1 (Task Master 24/7)", flush=True)
         t1 = threading.Thread(target=poll_bot, args=("bot1",), daemon=True)
