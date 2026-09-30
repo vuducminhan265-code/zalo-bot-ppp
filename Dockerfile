@@ -9,13 +9,14 @@ RUN apt-get update && apt-get install -y \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Install modern n8n 2.x globally ignoring C++ scripts
-RUN npm install -g n8n@latest --production --ignore-scripts --legacy-peer-deps
+# Install modern n8n 2.x and sqlite3 database driver globally
+RUN npm install -g n8n@latest sqlite3 --production --ignore-scripts --legacy-peer-deps
 
-# Install sqlite3 database driver directly into n8n's node_modules package directory omitting dev dependencies
+# Copy sqlite3 driver directly into n8n's internal node_modules (bypasses n8n package-lock.json parsing)
 RUN N8N_DIR=$(dirname $(dirname $(which n8n)))/lib/node_modules/n8n; \
-    echo "Installing sqlite3 into n8n dir: $N8N_DIR"; \
-    cd "$N8N_DIR" && npm install sqlite3@latest --save --omit=dev --legacy-peer-deps
+    SQLITE_DIR=$(dirname $(dirname $(which n8n)))/lib/node_modules/sqlite3; \
+    echo "Copying sqlite3 from $SQLITE_DIR into $N8N_DIR/node_modules/"; \
+    cp -r "$SQLITE_DIR" "$N8N_DIR/node_modules/"
 
 WORKDIR /app
 
