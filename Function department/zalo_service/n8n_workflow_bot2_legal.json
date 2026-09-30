@@ -35,7 +35,7 @@
         "promptType": "custom",
         "text": "={{ $json.body?.message?.text || $json.body?.text || $json.text || 'Xin chào' }}",
         "options": {
-          "systemMessage": "Bạn là Chuyên gia AI Cao cấp Trích xuất Pháp lý & Nghiên cứu Pháp luật của phòng Hợp tác Công tư & Quản lý Nợ (PPP & QLN), Sở Tài chính TP.HCM.\n- Đi thẳng vào trọng tâm, lý luận sắc bén, lập luận căn cứ theo đúng Điều, Khoản văn bản pháp quy.\n- Tự động gọi 'Legal Knowledge Vector Store (23 Lĩnh vực Luật)' khi trích dẫn Luật PPP, Nghị định 243/2025, NĐ 257/2025, Nghị quyết 98/2023, NQ 260/2025, Luật Đất đai, Đầu tư công, Xây dựng, Ngân sách nhà nước.\n- Tự động gọi 'Google Web Search Grounding' khi tra cứu sự kiện thời gian thực, thị trường, giá cả, thời sự và quy định pháp luật vừa cập nhật.\n- Tự động gọi 'NotebookLM Online Workspace Drive' khi đối soát tài liệu chuyên môn nội bộ phòng PPP."
+          "systemMessage": "Bạn là Chuyên gia AI Cao cấp Trích xuất Pháp lý & Nghiên cứu Pháp luật của phòng Hợp tác Công tư & Quản lý Nợ (PPP & QLN), Sở Tài chính TP.HCM.\n- Đi thẳng vào trọng tâm, lý luận sắc bén, lập luận căn cứ theo đúng Điều, Khoản văn bản pháp quy.\n- Tự động gọi 'Legal Knowledge Vector Store (Google Drive 23 Lĩnh vực Luật)' khi trích dẫn văn bản quy phạm pháp luật trong Google Drive Folder ID 1U39AY2NEkQm0eBXONId03QQGP2x_SALI (Luật PPP, NĐ 243/2025, NĐ 257/2025, NQ 98/2023, NQ 260/2025, Đất đai, Đầu tư công, Xây dựng...).\n- Tự động gọi 'Gemini NotebookLM Workspace' để truy vấn tri thức tổng hợp chuyên sâu từ Gemini NotebookLM AI.\n- Tự động gọi 'Google Web Search Grounding' khi tra cứu tin tức thời gian thực, giá cả, thời sự và quy định pháp luật mới nhất."
         }
       },
       "id": "ai-legal-agent",
@@ -76,9 +76,9 @@
     {
       "parameters": {
         "name": "Google_Web_Search_Grounding",
-        "description": "Tra cứu thông tin tin tức, giá cổ phiếu VIC/HPG, giá vàng, thể thao và sự kiện thời gian thực trên Google Search và báo chí chính thống.",
+        "description": "Tra cứu thông tin tin tức, thị trường thời gian thực trên Google Search và báo chí chính thống.",
         "language": "javaScript",
-        "jsCode": "const query = $fromAI('query', 'Từ khóa tìm kiếm tin tức/giá cả trên web');\nreturn JSON.stringify({ action: 'web_search', query: query });"
+        "jsCode": "const query = $fromAI('query', 'Từ khóa tìm kiếm tin tức thời gian thực trên web');\nreturn JSON.stringify({ action: 'web_search', query: query });"
       },
       "id": "tool-web-search",
       "name": "Google Web Search Grounding",
@@ -88,26 +88,26 @@
     },
     {
       "parameters": {
-        "name": "Legal_Knowledge_Vector_Store",
-        "description": "Tra cứu kho dữ liệu 23 lĩnh vực văn bản quy phạm pháp luật và chính sách đặc thù phòng PPP (Luật PPP 2020, NĐ 243/2025, NĐ 257/2025, NĐ 312/2025, NQ 98/2023, NQ 260/2025, Đất đai, Đầu tư công...).",
+        "name": "Legal_Knowledge_Vector_Store_Drive",
+        "description": "Tra cứu kho dữ liệu 23 lĩnh vực văn bản quy phạm pháp luật và chính sách đặc thù phòng PPP trên Google Drive (Folder ID: 1U39AY2NEkQm0eBXONId03QQGP2x_SALI) gồm Luật PPP 2020, NĐ 243/2025, NĐ 257/2025, NĐ 312/2025, NQ 98/2023, NQ 260/2025, Đất đai, Đầu tư công...",
         "language": "javaScript",
-        "jsCode": "const query = $fromAI('query', 'Nội dung trích xuất điều khoản văn bản pháp luật');\nreturn JSON.stringify({ action: 'legal_rag_search', query: query });"
+        "jsCode": "const query = $fromAI('query', 'Nội dung trích xuất điều khoản văn bản pháp luật trong kho Google Drive phòng PPP');\nreturn JSON.stringify({ action: 'legal_rag_search', query: query });"
       },
       "id": "tool-vector-store",
-      "name": "Legal Knowledge Vector Store (23 Lĩnh vực Luật)",
+      "name": "Legal Knowledge Vector Store (Google Drive 23 Lĩnh vực Luật)",
       "type": "@n8n/n8n-nodes-langchain.toolCode",
       "typeVersion": 1,
       "position": [840, 600]
     },
     {
       "parameters": {
-        "name": "NotebookLM_Online_Workspace_Drive",
-        "description": "Truy cập kho dữ liệu 23 lĩnh vực văn bản pháp luật và chính sách đặc thù TP.HCM trực tuyến 24/7 trên Google Drive (Folder ID: 1U39AY2NEkQm0eBXONId03QQGP2x_SALI) để đối soát trích dẫn Luật PPP, NĐ 243/2025, NĐ 257/2025, NQ 98/2023, NQ 260/2025.",
+        "name": "Gemini_NotebookLM_Workspace",
+        "description": "Tra cứu tri thức tổng hợp chuyên sâu từ Gemini NotebookLM AI do Anh Alexander biên soạn (đối soát tổng hợp, lý luận pháp lý, phân tích dự án PPP).",
         "language": "javaScript",
-        "jsCode": "const question = $fromAI('question', 'Nội dung tra cứu văn bản pháp luật phòng PPP trên Google Drive');\nreturn JSON.stringify({ action: 'notebooklm_workspace_search', question: question });"
+        "jsCode": "const question = $fromAI('question', 'Nội dung tra cứu tri thức tổng hợp trên Gemini NotebookLM AI');\nreturn JSON.stringify({ action: 'notebooklm_workspace_search', question: question });"
       },
       "id": "tool-notebooklm-drive",
-      "name": "NotebookLM Online Workspace Drive (Google Drive 24/7)",
+      "name": "Gemini NotebookLM Workspace",
       "type": "@n8n/n8n-nodes-langchain.toolCode",
       "typeVersion": 1,
       "position": [1000, 600]
@@ -178,7 +178,7 @@
         ]
       ]
     },
-    "Legal Knowledge Vector Store (23 Lĩnh vực Luật)": {
+    "Legal Knowledge Vector Store (Google Drive 23 Lĩnh vực Luật)": {
       "ai_tool": [
         [
           {
@@ -189,7 +189,7 @@
         ]
       ]
     },
-    "NotebookLM Online Workspace Drive (Google Drive 24/7)": {
+    "Gemini NotebookLM Workspace": {
       "ai_tool": [
         [
           {
