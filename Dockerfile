@@ -38,10 +38,10 @@ COPY . .
 RUN chmod +x /app/start.sh
 
 # Set environment variables
-ENV PORT=10000
-ENV N8N_PORT=10000
+ENV PORT=5678
+ENV N8N_PORT=5678
 ENV N8N_HOST=0.0.0.0
-ENV NODE_OPTIONS="--max-old-space-size=384"
+ENV NODE_OPTIONS="--max-old-space-size=280"
 ENV N8N_RUNNERS_MODE=external
 ENV N8N_RUNNERS_AUTH_TOKEN="alexander_ppp_task_runner_secret_2026"
 ENV N8N_BASIC_AUTH_ACTIVE=false
@@ -51,7 +51,7 @@ ENV N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
 ENV N8N_SKIP_WEBHOOK_DEREGISTRATION=true
 ENV PYTHONPATH="/app:/app/Function department"
 
-EXPOSE 10000
+EXPOSE 5678
 
 # Start Zalo Bot & Cloud n8n Service
 CMD ["/bin/bash", "/app/start.sh"]
