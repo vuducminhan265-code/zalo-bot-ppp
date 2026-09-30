@@ -1,26 +1,15 @@
-FROM python:3.11-slim
+FROM n8nio/n8n:latest
 
-# Install system build tools, make, g++, and Node.js 20
-RUN apt-get update && apt-get install -y \
-    curl \
-    git \
-    gnupg \
-    make \
-    g++ \
-    build-essential \
-    python3-dev \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs \
-    && rm -rf /var/lib/apt/lists/*
+USER root
 
-# Install pinned stable n8n v2.40.7 with --legacy-peer-deps
-RUN npm install -g n8n@2.40.7 --production --legacy-peer-deps
+# Install Python 3, pip, bash, git, and curl for Zalo Bot Agent Service
+RUN apk add --no-cache python3 py3-pip bash curl git
 
 WORKDIR /app
 
 # Copy requirements & install python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt --break-system-packages
 
 # Copy project files
 COPY . .

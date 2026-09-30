@@ -19,9 +19,14 @@ export N8N_INSTANCE_OWNER_FIRST_NAME="Alex"
 export N8N_INSTANCE_OWNER_LAST_NAME="Vu"
 export N8N_INSTANCE_OWNER_PASSWORD_HASH='$2b$10$FNWbdfjbUtjQHdxSnO1q9u/XjiJQ7j.PR8DVyLzjT/e.2pJWblmdy'
 
+# Alias python to python3 if missing
+if ! command -v python &> /dev/null; then
+    alias python=python3
+fi
+
 # 1. Clean slate migration, Seed Credentials & Workflow Import
 echo "📥 Auto-importing Gemini Credentials & Zalo AI Agent Workflows into Cloud n8n..."
-python "Function department/zalo_service/generate_n8n_credentials.py" || true
+python3 "Function department/zalo_service/generate_n8n_credentials.py" || true
 n8n import:credentials --input="/app/Function department/zalo_service/n8n_credentials.json" || true
 rm -f "/app/Function department/zalo_service/n8n_credentials.json" || true
 n8n import:workflow --input="/app/Function department/zalo_service/n8n_workflow_bot1_tasks.json" || true
@@ -29,11 +34,11 @@ n8n import:workflow --input="/app/Function department/zalo_service/n8n_workflow_
 n8n update:workflow --all --active=true || true
 
 # Seed SQLite Owner User & Personal Project directly
-python "Function department/zalo_service/seed_sqlite_owner.py" || true
+python3 "Function department/zalo_service/seed_sqlite_owner.py" || true
 
 # 2. Start Zalo Bot Python Agent Service in background (Long-Polling 24/7)
 echo "🤖 Starting Zalo Bot Python Agent Service in background..."
-python "Function department/zalo_service/zalo_bot_service.py" &
+python3 "Function department/zalo_service/zalo_bot_service.py" &
 
 # 3. Start n8n as main process directly on PORT (Native Cloud Web App)
 echo "⚡ Starting n8n natively on port ${N8N_PORT}..."
