@@ -264,12 +264,12 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
     if ai_query:
         n8n_handled = False
         try:
-            port = os.getenv("PORT", "10000")
-            n8n_url = f"http://127.0.0.1:{port}/webhook/{bot_cfg['webhook']}"
+            n8n_port = os.getenv("N8N_PORT") or "5678"
+            n8n_url = f"http://127.0.0.1:{n8n_port}/webhook/{bot_cfg['webhook']}"
             try:
                 n8n_resp = requests.post(n8n_url, json={"chat_id": str(chat_id), "text": ai_query, "sender_name": sender_name}, timeout=12)
                 if n8n_resp.status_code == 200 and n8n_resp.text.strip() and "not registered" not in n8n_resp.text:
-                    print(f"--> [{bot_key.upper()} Forwarded to n8n Webhook via {n8n_url}]", flush=True)
+                    print(f"--> [{bot_key.upper()} Forwarded to Local/Cloud n8n Webhook via {n8n_url}]", flush=True)
                     n8n_data = n8n_resp.json()
                     n8n_text = n8n_data.get("output") or n8n_data.get("text") or n8n_data.get("response")
                     if n8n_text:
