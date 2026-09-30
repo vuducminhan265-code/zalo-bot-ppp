@@ -145,7 +145,7 @@ class IntegratedZaloBotAgent:
                         except Exception as e:
                             print(f"⚠️ Lỗi update Google Sheets: {e}", flush=True)
 
-                    if status_decision == "completed":
+                        sheets_status_text = 'ĐÃ TỰ ĐỘNG CẬP NHẬT TRẠNG THÁI "ĐÃ HOÀN THÀNH" 🟢' if sheets_updated else 'Đã thẩm định hoàn thành 🟢'
                         resp = [
                             "✅ **[KẾT QUẢ THẨM ĐỊNH & NGHIỆM THU TỰ ĐỘNG - PHÒNG PPP]**",
                             f"👤 Người nộp: **{sender_name}**",
@@ -155,7 +155,7 @@ class IntegratedZaloBotAgent:
                             f"📑 Thể thức: Số {doc_number if doc_number else 'Văn bản nội bộ'} | Ngày {doc_date if doc_date else 'Hiện hành'}",
                             f"💡 Đánh giá của AI: {ai_comment}",
                             "────────────────────────────",
-                            f"📊 **Bảng giao việc Google Sheets:** {'ĐÃ TỰ ĐỘNG CẬP NHẬT TRẠNG THÁI \"ĐÃ HOÀN THÀNH\" 🟢' if sheets_updated else 'Đã thẩm định hoàn thành 🟢'}"
+                            f"📊 **Bảng giao việc Google Sheets:** {sheets_status_text}"
                         ]
                         return "\n".join(resp)
                     else:

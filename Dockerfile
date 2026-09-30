@@ -9,8 +9,9 @@ RUN apt-get update && apt-get install -y \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Install modern n8n 2.x globally on Node 24.x (skipping C++ build scripts via --ignore-scripts)
-RUN npm install -g n8n@latest --production --ignore-scripts --legacy-peer-deps
+# Install modern n8n 2.x and sqlite3 database driver
+RUN npm install -g n8n@latest sqlite3 --production --ignore-scripts --legacy-peer-deps \
+    && (cd /usr/lib/node_modules/n8n 2>/dev/null || cd /usr/local/lib/node_modules/n8n) && npm install sqlite3 --save --legacy-peer-deps
 
 WORKDIR /app
 
