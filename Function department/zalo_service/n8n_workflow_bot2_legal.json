@@ -126,7 +126,15 @@
         "dataType": "json",
         "mode": "all",
         "options": {
-          "dataPropertyName": "text"
+          "dataPropertyName": "text",
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "department",
+                "value": "PPP & QLN Sở Tài chính TP.HCM"
+              }
+            ]
+          }
         }
       },
       "id": "doc-loader",
