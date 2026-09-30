@@ -124,7 +124,7 @@
     {
       "parameters": {
         "dataType": "string",
-        "value": "={{ $json.body?.message?.text || $json.body?.text || '' }}"
+        "text": "={{ $json.body?.message?.text || $json.body?.text || 'KHO DỮ LIỆU VĂN BẢN PHÁP LUẬT 23 LĨNH VỰC PHÒNG PPP & QLN SỞ TÀI CHÍNH TP.HCM' }}"
       },
       "id": "doc-loader",
       "name": "Document Default Data Loader",
