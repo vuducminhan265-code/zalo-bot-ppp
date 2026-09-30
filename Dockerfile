@@ -2,22 +2,14 @@ FROM n8nio/n8n:latest
 
 USER root
 
-ENV PATH="/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin:$PATH"
-
-# Install Python 3 & tools with explicit path detection & verification
-RUN if [ -x /sbin/apk ] || command -v apk >/dev/null 2>&1; then \
-        apk add --no-cache python3 py3-pip bash curl git; \
-    elif [ -x /usr/bin/apt-get ] || command -v apt-get >/dev/null 2>&1; then \
-        apt-get update && apt-get install -y python3 python3-pip bash curl git && rm -rf /var/lib/apt/lists/*; \
-    else \
-        echo "No supported package manager found!" && exit 1; \
-    fi && python3 --version
+# Update package index and install Python 3 & tools on Alpine n8n image
+RUN apk update && apk add --no-cache python3 py3-pip bash curl git && python3 --version
 
 WORKDIR /app
 
 # Copy requirements & install python dependencies
 COPY requirements.txt .
-RUN python3 -m pip install --no-cache-dir -r requirements.txt --break-system-packages || pip3 install --no-cache-dir -r requirements.txt
+RUN python3 -m pip install --no-cache-dir -r requirements.txt --break-system-packages
 
 # Copy project files
 COPY . .
