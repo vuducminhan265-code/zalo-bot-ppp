@@ -11,11 +11,14 @@ export N8N_WEBHOOK_URL=https://zalo-bot-ppp-service.onrender.com
 export WEBHOOK_URL=https://zalo-bot-ppp-service.onrender.com
 export N8N_EDITOR_BASE_URL=https://zalo-bot-ppp-service.onrender.com
 
-# Memory & Task Runner Optimization (Disable internal runners to prevent DB timeouts and V8 heap crashes)
+# Memory & Task Runner Optimization (Set runners mode external to prevent internal task broker DB lock & timeouts)
 export NODE_OPTIONS="--max-old-space-size=384"
 export WEB_CONCURRENCY=1
-export N8N_RUNNERS_ENABLED=false
-export N8N_RUNNERS_MODE=disabled
+export N8N_RUNNERS_MODE=external
+export N8N_UNVERIFIED_PACKAGES_ENABLED=true
+export N8N_RUNNERS_TASK_TIMEOUT=300
+export N8N_COMPRESSION_NODE_MAX_DECOMPRESSED_SIZE_BYTES=2147483648
+export N8N_COMPRESSION_NODE_MAX_ZIP_ENTRIES=5000
 export N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
 export N8N_BASIC_AUTH_ACTIVE=false
 export N8N_DIAGNOSTICS_ENABLED=false
