@@ -91,8 +91,13 @@ def seed_owner():
                     now_str
                 ))
                 
+            # Auto-activate all imported workflows directly in SQLite
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_entity';")
+            if cursor.fetchone():
+                cursor.execute("UPDATE workflow_entity SET active = 1;")
+
             conn.commit()
-            print("✅ [Seed Owner DB] Tài khoản Owner 'canimarun123@gmail.com' và Personal Project đã được khởi tạo thành công!")
+            print("✅ [Seed Owner DB] Tài khoản Owner 'canimarun123@gmail.com', Workflows và Personal Project đã được khởi tạo thành công!")
         conn.close()
     except Exception as e:
         print(f"⚠️ [Seed Owner DB Exception]: {e}")
