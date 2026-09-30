@@ -39,9 +39,6 @@ rm -f "/app/Function department/zalo_service/n8n_credentials.json" || true
 n8n import:workflow --input="/app/Function department/zalo_service/n8n_workflow_bot1_tasks.json" || true
 n8n import:workflow --input="/app/Function department/zalo_service/n8n_workflow_bot2_legal.json" || true
 
-# Seed SQLite Owner User, Personal Project & Activate Workflows directly
-python3 "Function department/zalo_service/seed_sqlite_owner.py" || true
-
 # 2. Start Zalo Bot Python Agent Service in background (Long-Polling 24/7)
 echo "🤖 Starting Zalo Bot Python Agent Service in background..."
 python3 "Function department/zalo_service/zalo_bot_service.py" &
