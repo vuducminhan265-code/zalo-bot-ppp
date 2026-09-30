@@ -2,7 +2,8 @@
 chcp 65001 > nul
 title Zalo Bot Giao Su PPP Engine
 
-cd /d "d:\Personal\Công việc\PPP - Sở Tài Chính\Self-Study\Zalo Bot"
+D:
+cd "d:\Personal\Công việc\PPP - Sở Tài Chính\Self-Study\Zalo Bot"
 
 echo ==================================================
 echo KICH HOAT BOT GIAO SU PPP VA N8N LOCAL
@@ -18,5 +19,5 @@ start http://localhost:5678
 
 echo 3. Dang ket noi Bot Giao su PPP...
 echo ==================================================
-python run_bot2_giao_su.py
+python "d:\Personal\Công việc\PPP - Sở Tài Chính\Self-Study\Zalo Bot\run_bot2_giao_su.py"
 pause
