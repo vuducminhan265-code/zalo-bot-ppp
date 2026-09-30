@@ -1,22 +1,23 @@
-FROM n8nio/n8n:latest
+FROM python:3.11-slim
 
-USER root
-
-# Install Python 3, pip, bash, git, and curl via apt-get (Debian base image)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    python3-pip \
-    python3-dev \
-    bash \
+# Install system dependencies & Node.js 18 LTS
+RUN apt-get update && apt-get install -y \
     curl \
     git \
+    gnupg \
+    build-essential \
+    && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
+
+# Install modern n8n 2.x globally on Node 18 LTS (uses pre-built binaries)
+RUN npm install -g n8n@latest --production --legacy-peer-deps
 
 WORKDIR /app
 
 # Copy requirements & install python dependencies
 COPY requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt --break-system-packages || pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy project files
 COPY . .
