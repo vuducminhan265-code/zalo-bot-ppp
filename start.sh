@@ -3,20 +3,24 @@ echo "=================================================="
 echo "🚀 CLOUD INTEGRATED N8N + ZALO BOT AGENT ENGINE"
 echo "=================================================="
 
-# Use Render's assigned PORT for n8n native binding
-export PORT=${PORT:-10000}
-export N8N_PORT=${PORT}
-export N8N_LISTEN_PORT=${PORT}
+# Port & Address Binding
+export N8N_PORT=${PORT:-10000}
 export N8N_HOST=0.0.0.0
 export N8N_LISTEN_ADDRESS=0.0.0.0
 export N8N_WEBHOOK_URL=https://zalo-bot-ppp-service.onrender.com
 export WEBHOOK_URL=https://zalo-bot-ppp-service.onrender.com
 export N8N_EDITOR_BASE_URL=https://zalo-bot-ppp-service.onrender.com
-# Memory Optimization for Render Free Tier (512MB RAM limit)
-export NODE_OPTIONS="--max-old-space-size=320"
+
+# Memory & Task Runner Optimization (Disable internal runners to prevent DB timeouts and V8 heap crashes)
+export NODE_OPTIONS="--max-old-space-size=384"
 export WEB_CONCURRENCY=1
+export N8N_RUNNERS_ENABLED=false
+export N8N_RUNNERS_MODE=disabled
 export N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
 export N8N_BASIC_AUTH_ACTIVE=false
+export N8N_DIAGNOSTICS_ENABLED=false
+export N8N_VERSION_NOTIFICATIONS_ENABLED=false
+export N8N_PERSONALIZATION_ENABLED=false
 export N8N_ENCRYPTION_KEY="alexander_ppp_master_encryption_key_2026"
 
 # Native Owner Auto-Provisioning (n8n 2.x+)
@@ -31,7 +35,7 @@ if ! command -v python &> /dev/null; then
     alias python=python3
 fi
 
-# 1. Clean slate migration, Seed Credentials & Workflow Import
+# 1. Auto-import Credentials & Workflows
 echo "📥 Auto-importing Gemini Credentials & Zalo AI Agent Workflows into Cloud n8n..."
 python3 "Function department/zalo_service/generate_n8n_credentials.py" || true
 n8n import:credentials --input="/app/Function department/zalo_service/n8n_credentials.json" || true
@@ -43,6 +47,6 @@ n8n import:workflow --input="/app/Function department/zalo_service/n8n_workflow_
 echo "🤖 Starting Zalo Bot Python Agent Service in background..."
 python3 "Function department/zalo_service/zalo_bot_service.py" &
 
-# 3. Start n8n as main process directly on PORT (Native Cloud Web App)
-echo "⚡ Starting n8n natively on port ${PORT}..."
-exec n8n start --port ${PORT}
+# 3. Start n8n natively as main process
+echo "⚡ Starting n8n natively on port ${N8N_PORT}..."
+exec n8n start
