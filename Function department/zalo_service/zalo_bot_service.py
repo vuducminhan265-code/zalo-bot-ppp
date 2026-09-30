@@ -253,10 +253,14 @@ def process_message(msg_obj: dict):
             send_zalo_message(chat_id, ai_ans)
 
 def auto_setup_n8n_owner():
-    """Tự động gọi /rest/owner/setup sau khi n8n khởi động để triệt tiêu màn hình Set up owner account."""
-    time.sleep(5)
+    """Tự động gọi N8N REST Owner setup sau khi n8n khởi động để triệt tiêu màn hình Set up owner account."""
+    time.sleep(8)
     port = os.getenv("PORT", "10000")
-    setup_url = f"http://127.0.0.1:{port}/rest/owner/setup"
+    setup_urls = [
+        f"http://127.0.0.1:{port}/rest/owner/setup",
+        f"http://127.0.0.1:{port}/rest/owner",
+        f"http://127.0.0.1:{port}/rest/users/owner"
+    ]
     payload = {
         "email": "canimarun123@gmail.com",
         "firstName": "Alex",
@@ -264,18 +268,19 @@ def auto_setup_n8n_owner():
         "password": "Password123@AlexVu",
         "agreeToTerms": True
     }
-    for attempt in range(12):
-        try:
-            resp = requests.post(setup_url, json=payload, timeout=5)
-            if resp.status_code in [200, 201]:
-                print(f"✅ [N8N Auto-Owner Setup] Đã tự động tạo tài khoản Owner thành công (lần thử {attempt+1})!", flush=True)
-                break
-            elif resp.status_code == 400 and "already" in resp.text.lower():
-                print("ℹ️ [N8N Auto-Owner Setup] Tài khoản Owner đã được tạo sẵn.", flush=True)
-                break
-        except Exception:
-            pass
-        time.sleep(2)
+    for attempt in range(25):
+        for setup_url in setup_urls:
+            try:
+                resp = requests.post(setup_url, json=payload, timeout=5)
+                if resp.status_code in [200, 201]:
+                    print(f"✅ [N8N Auto-Owner Setup] Đã tự động kích hoạt tài khoản Owner thành công qua {setup_url}!", flush=True)
+                    return
+                elif resp.status_code == 400 and ("already" in resp.text.lower() or "exist" in resp.text.lower()):
+                    print("ℹ️ [N8N Auto-Owner Setup] Tài khoản Owner đã được kích hoạt sẵn.", flush=True)
+                    return
+            except Exception:
+                pass
+        time.sleep(3)
 
 def start_bot_service():
     print("==================================================", flush=True)
