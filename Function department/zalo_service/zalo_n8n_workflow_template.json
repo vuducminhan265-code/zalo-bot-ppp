@@ -121,8 +121,8 @@
     },
     {
       "parameters": {
-        "dataType": "string",
-        "value": "={{ $json.body?.message?.text || $json.body?.text || '' }}"
+        "dataType": "json",
+        "options": {}
       },
       "id": "doc-loader",
       "name": "Document Default Data Loader",
