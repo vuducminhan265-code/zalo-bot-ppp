@@ -8,8 +8,10 @@ echo ==================================================
 echo KICH HOAT BOT GIAO SU PPP VA N8N LOCAL
 echo ==================================================
 
-echo 1. Khoi dong n8n Engine ngam...
-start /b n8n start > nul 2>&1
+echo 1. Dang khoi dong n8n Engine ngam (vui long cho 5 giay)...
+start /b n8n.cmd start > nul 2>&1
+
+timeout /t 5 > nul
 
 echo 2. Mo trinh duyet web n8n...
 start http://localhost:5678
