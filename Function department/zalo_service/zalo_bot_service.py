@@ -215,28 +215,47 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
     print(f"\n📩 [{bot_key.upper()} TIN NHẮN] Từ: {sender_name} ({chat_type}) | ChatID: {chat_id} | Nội dung: '{raw_text}'", flush=True)
     clean_text = raw_text.lower()
     
-    # 2. Lệnh Nhắc việc / Báo cáo tiến độ (Dành cho Bot 1)
-    task_keywords = ["/nhacviec", "nhacviec", "nhac việc", "nhắc việc", "nhac_viec", "/tasks", "tasks", "task", "/tiendo", "tiendo", "tien do", "tiến độ", "nhiệm vụ", "nhiem vu", "báo cáo tiến độ", "bao cao tien do", "danh sách task"]
+    # 2. Lệnh Nhắc việc / Báo cáo tiến độ (CHỈ DÀNH CHO BOT 1 - TASK MASTER)
+    task_keywords = ["/nhacviec", "nhacviec", "nhac việc", "nhắc việc", "nhac_viec", "/tasks", "tasks", "task", "/tiendo", "tiendo", "tien do", "tiến độ", "báo cáo tiến độ", "bao cao tien do", "danh sách task"]
     if any(cmd in clean_text for cmd in task_keywords):
-        print(f"--> Đang xuất báo cáo tiến độ từ Google Sheets...", flush=True)
-        try:
-            report_msg, guide_msg = task_fetcher.generate_reminder_parts()
-            send_zalo_message(chat_id, report_msg, bot_key=bot_key)
-            time.sleep(0.5)
-            send_zalo_message(chat_id, guide_msg, bot_key=bot_key)
-        except Exception:
-            reminder = generate_reminder_message()
-            send_zalo_message(chat_id, reminder, bot_key=bot_key)
-        return
+        if bot_key == "bot1":
+            print(f"--> [BOT1] Đang xuất báo cáo tiến độ từ Google Sheets...", flush=True)
+            try:
+                report_msg, guide_msg = task_fetcher.generate_reminder_parts()
+                send_zalo_message(chat_id, report_msg, bot_key=bot_key)
+                time.sleep(0.5)
+                send_zalo_message(chat_id, guide_msg, bot_key=bot_key)
+            except Exception:
+                reminder = generate_reminder_message()
+                send_zalo_message(chat_id, reminder, bot_key=bot_key)
+            return
+        else:
+            # Bot 2 (Bot Giáo sư PPP): Chuyên trách Pháp lý RAG & Search Engine
+            redirect_msg = (
+                "⚖️ **Bot Giáo sư PPP** là AI Agent chuyên trách **Tra cứu Pháp lý PPP & Search Engine** (RAG Vector Store 23 Lĩnh vực Luật + Web Search Grounding).\n\n"
+                "👉 Để xem **Báo cáo Tiến độ & Nhắc việc Bảng giao việc**, Anh/Chị vui lòng nhắn tin với **Bot PPP Full Service** (Bot 1) nhé!"
+            )
+            send_zalo_message(chat_id, redirect_msg, bot_key=bot_key)
+            return
 
-    # 3. Lệnh Hướng dẫn / Trợ giúp
+    # 3. Lệnh Hướng dẫn / Trợ giúp riêng cho từng Bot
     if clean_text in ["/help", "/start", "hướng dẫn", "chức năng", "help"]:
-        help_msg = (
-            f"👋 Chào {sender_name}! Tôi là **{bot_cfg['name']}**.\n\n"
-            "📌 **Phân công trợ lý:**\n"
-            "• **Bot 1 (Task Master)**: Nhắc việc `/nhacviec`, báo cáo tiến độ Google Sheets, thẩm định OCR tệp báo cáo.\n"
-            "• **Bot 2 (Legal Supreme RAG)**: Tra cứu chuyên sâu Luật PPP 2020, NĐ 243/2025, NĐ 257/2025, NQ 98/2023, NQ 260/2025 & Web Search thời gian thực."
-        )
+        if bot_key == "bot1":
+            help_msg = (
+                f"👋 Chào {sender_name}! Tôi là **{bot_cfg['name']}**.\n\n"
+                "📌 **Chức năng chính của Bot 1 (Task Master):**\n"
+                "• **Nhắc việc**: Gõ `/nhacviec` hoặc `báo cáo tiến độ` để xem task quá hạn & hạn hôm nay.\n"
+                "• **Nộp file tự động**: Gửi file báo cáo (PDF/Word/Excel) để OCR & đối soát Bảng giao việc Google Sheets.\n"
+                "• **Tra cứu Task**: Hỏi bất kỳ thông tin tiến độ chuyên viên phòng PPP&QLN."
+            )
+        else:
+            help_msg = (
+                f"👋 Chào {sender_name}! Tôi là **Bot Giáo sư PPP** (Legal RAG & Search Engine AI Agent).\n\n"
+                "📌 **Chức năng chính của Bot 2 (Giáo sư PPP):**\n"
+                "• **Tra cứu Pháp lý PPP (RAG Engine)**: Hỏi chi tiết Luật PPP 2020, NĐ 243/2025, NĐ 257/2025, NQ 98/2023, NQ 260/2025, Đất đai, Đầu tư công...\n"
+                "• **Web Search Grounding**: Tra cứu tin tức, sự kiện, quy định pháp luật mới nhất theo thời gian thực trên Google Search.\n"
+                "• **Thẩm định Pháp lý**: Gửi file văn bản quy phạm pháp luật để phân tích & trích dẫn Điều/Khoản."
+            )
         send_zalo_message(chat_id, help_msg, bot_key=bot_key)
         return
 
