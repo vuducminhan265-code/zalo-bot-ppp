@@ -89,77 +89,22 @@
     {
       "parameters": {
         "name": "Legal_Knowledge_Vector_Store",
-        "description": "Tra cứu kho dữ liệu 23 lĩnh vực văn bản quy phạm pháp luật và chính sách đặc thù (Luật PPP, NĐ 243, NĐ 257, NĐ 274, NQ 98, NQ 260, Đất đai, Đấu thầu, Xây dựng, Đầu tư công...) trích xuất chính xác theo từng Điều/Khoản."
+        "description": "Tra cứu kho dữ liệu 23 lĩnh vực văn bản quy phạm pháp luật và chính sách đặc thù phòng PPP (Luật PPP 2020, NĐ 243/2025, NĐ 257/2025, NĐ 312/2025, NQ 98/2023, NQ 260/2025, Đất đai, Đầu tư công...).",
+        "language": "javaScript",
+        "jsCode": "const query = $fromAI('query', 'Nội dung trích xuất điều khoản văn bản pháp luật');\nreturn JSON.stringify({ action: 'legal_rag_search', query: query });"
       },
       "id": "tool-vector-store",
       "name": "Legal Knowledge Vector Store (23 Lĩnh vực Luật)",
-      "type": "@n8n/n8n-nodes-langchain.toolVectorStore",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
       "typeVersion": 1,
       "position": [840, 600]
     },
     {
-      "parameters": {},
-      "id": "vector-store-memory",
-      "name": "In-Memory Vector Store",
-      "type": "@n8n/n8n-nodes-langchain.vectorStoreInMemory",
-      "typeVersion": 1,
-      "position": [840, 800]
-    },
-    {
-      "parameters": {
-        "modelName": "models/embedding-001"
-      },
-      "credentials": {
-        "googlePalmApi": {
-          "id": "1",
-          "name": "Google Gemini(PaLM) Api account"
-        }
-      },
-      "id": "gemini-embeddings",
-      "name": "Embeddings Google Gemini",
-      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
-      "typeVersion": 1,
-      "position": [740, 980]
-    },
-    {
-      "parameters": {
-        "dataType": "json",
-        "mode": "all",
-        "options": {
-          "dataPropertyName": "text",
-          "metadata": {
-            "metadataValues": [
-              {
-                "name": "department",
-                "value": "PPP & QLN Sở Tài chính TP.HCM"
-              }
-            ]
-          }
-        }
-      },
-      "id": "doc-loader",
-      "name": "Document Default Data Loader",
-      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
-      "typeVersion": 1,
-      "position": [940, 980]
-    },
-    {
-      "parameters": {
-        "chunkSize": 600,
-        "chunkOverlap": 60
-      },
-      "id": "text-splitter",
-      "name": "Recursive Character Text Splitter",
-      "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
-      "typeVersion": 1,
-      "position": [940, 1160]
-    },
-    {
       "parameters": {
         "name": "NotebookLM_Online_Workspace_Drive",
-        "description": "Truy cập kho dữ liệu 23 lĩnh vực văn bản pháp luật và chính sách đặc thù TP.HCM trực tuyến 24/7 trên Google Drive (Folder ID: 1U39AY2NEkQm0eBXONId03QQGP2x_SALI, Link: https://drive.google.com/drive/folders/1U39AY2NEkQm0eBXONId03QQGP2x_SALI?usp=sharing) để đối soát trích dẫn Luật PPP 64/2020, NĐ 243/2025, NĐ 257/2025, NĐ 312/2025, TT 128/2025, NQ 98/2023, NQ 188/2025, NQ 260/2025.",
+        "description": "Truy cập kho dữ liệu 23 lĩnh vực văn bản pháp luật và chính sách đặc thù TP.HCM trực tuyến 24/7 trên Google Drive (Folder ID: 1U39AY2NEkQm0eBXONId03QQGP2x_SALI) để đối soát trích dẫn Luật PPP, NĐ 243/2025, NĐ 257/2025, NQ 98/2023, NQ 260/2025.",
         "language": "javaScript",
-        "jsCode": "const question = $fromAI('question', 'Nội dung tra cứu văn bản pháp luật phòng PPP trên Google Drive');\nreturn JSON.stringify({ action: 'notebooklm_workspace_search', folder_id: '1U39AY2NEkQm0eBXONId03QQGP2x_SALI', drive_url: 'https://drive.google.com/drive/folders/1U39AY2NEkQm0eBXONId03QQGP2x_SALI?usp=sharing', question: question });"
+        "jsCode": "const question = $fromAI('question', 'Nội dung tra cứu văn bản pháp luật phòng PPP trên Google Drive');\nreturn JSON.stringify({ action: 'notebooklm_workspace_search', question: question });"
       },
       "id": "tool-notebooklm-drive",
       "name": "NotebookLM Online Workspace Drive (Google Drive 24/7)",
@@ -170,7 +115,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://bot-api.zaloplatforms.com/bot1175912593990733827:IQHQDAkiFOfwODzTmEKdPvfCSbDJubszVeLXcvxwqTSZXPbNaBaTLYQAmeXpAWMX/sendMessage",
+        "url": "https://bot-api.zaloplatforms.com/bot916808225583576762:qyESEAzJfULNqmolAsxDwfskYoEhQXPDNPytmKbTOeFquMpnOkmLQOURsBEgJDln/sendMessage",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"chat_id\": \"{{ $('Zalo Legal Webhook Inbound').item.json.body?.chat_id || $('Zalo Legal Webhook Inbound').item.json.body?.sender?.id || $('Zalo Legal Webhook Inbound').item.json.chat_id }}\",\n  \"text\": \"{{ $json.output }}\",\n  \"parse_mode\": \"markdown\"\n}",
@@ -207,11 +152,6 @@
             "node": "AI Agent (Legal & Web Search Specialist)",
             "type": "ai_languageModel",
             "index": 0
-          },
-          {
-            "node": "Legal Knowledge Vector Store (23 Lĩnh vực Luật)",
-            "type": "ai_languageModel",
-            "index": 0
           }
         ]
       ]
@@ -244,50 +184,6 @@
           {
             "node": "AI Agent (Legal & Web Search Specialist)",
             "type": "ai_tool",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "In-Memory Vector Store": {
-      "ai_vectorStore": [
-        [
-          {
-            "node": "Legal Knowledge Vector Store (23 Lĩnh vực Luật)",
-            "type": "ai_vectorStore",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Embeddings Google Gemini": {
-      "ai_embedding": [
-        [
-          {
-            "node": "In-Memory Vector Store",
-            "type": "ai_embedding",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Document Default Data Loader": {
-      "ai_document": [
-        [
-          {
-            "node": "In-Memory Vector Store",
-            "type": "ai_document",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Recursive Character Text Splitter": {
-      "ai_textSplitter": [
-        [
-          {
-            "node": "Document Default Data Loader",
-            "type": "ai_textSplitter",
             "index": 0
           }
         ]

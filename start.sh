@@ -12,8 +12,8 @@ export N8N_LISTEN_ADDRESS=0.0.0.0
 export N8N_WEBHOOK_URL=https://zalo-bot-ppp-service.onrender.com
 export N8N_EDITOR_BASE_URL=https://zalo-bot-ppp-service.onrender.com
 
-# Memory & Task Runner Configuration (Cap V8 heap at 280MB for Render 512MB RAM limit)
-export NODE_OPTIONS="--max-old-space-size=280"
+# Memory & Task Runner Configuration (Cap V8 heap at 320MB for Render 512MB RAM limit)
+export NODE_OPTIONS="--max-old-space-size=320"
 export WEB_CONCURRENCY=1
 export N8N_RUNNERS_MODE=external
 export N8N_RUNNERS_AUTH_TOKEN="alexander_ppp_task_runner_secret_2026"
