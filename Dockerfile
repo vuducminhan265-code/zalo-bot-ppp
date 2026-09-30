@@ -13,8 +13,8 @@ RUN apt-get update && apt-get install -y \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Install modern n8n globally (v2.x with N8N_INSTANCE_OWNER_MANAGED_BY_ENV support)
-RUN npm install -g n8n@latest --production
+# Install pinned stable n8n v2.40.7 with --legacy-peer-deps
+RUN npm install -g n8n@2.40.7 --production --legacy-peer-deps
 
 WORKDIR /app
 
