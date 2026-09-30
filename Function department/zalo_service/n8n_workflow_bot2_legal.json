@@ -102,9 +102,9 @@
     {
       "parameters": {
         "name": "Gemini_NotebookLM_Workspace",
-        "description": "Tra cứu tri thức tổng hợp chuyên sâu từ Gemini NotebookLM AI do Anh Alexander biên soạn (đối soát tổng hợp, lý luận pháp lý, phân tích dự án PPP).",
+        "description": "Tra cứu tri thức tổng hợp chuyên sâu từ Gemini NotebookLM AI 'Learning PPP' do Anh Alexander biên soạn tại URL https://notebooklm.google.com/notebook/f67bfdbc-f161-42a5-b5f6-5858e16c8ae2 (Notebook ID: f67bfdbc-f161-42a5-b5f6-5858e16c8ae2 / learning-ppp) để truy vấn tri thức đối soát tổng hợp, lý luận pháp lý và phương án tài chính dự án PPP.",
         "language": "javaScript",
-        "jsCode": "const question = $fromAI('question', 'Nội dung tra cứu tri thức tổng hợp trên Gemini NotebookLM AI');\nreturn JSON.stringify({ action: 'notebooklm_workspace_search', question: question });"
+        "jsCode": "const question = $fromAI('question', 'Nội dung tra cứu tri thức tổng hợp trên Gemini NotebookLM AI');\nreturn JSON.stringify({ action: 'notebooklm_workspace_search', notebook_url: 'https://notebooklm.google.com/notebook/f67bfdbc-f161-42a5-b5f6-5858e16c8ae2', notebook_id: 'f67bfdbc-f161-42a5-b5f6-5858e16c8ae2', question: question });"
       },
       "id": "tool-notebooklm-drive",
       "name": "Gemini NotebookLM Workspace",
