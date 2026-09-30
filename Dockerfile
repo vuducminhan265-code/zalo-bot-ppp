@@ -2,14 +2,21 @@ FROM n8nio/n8n:latest
 
 USER root
 
-# Update package index and install Python 3 & tools on Alpine n8n image
-RUN apk update && apk add --no-cache python3 py3-pip bash curl git && python3 --version
+# Install Python 3, pip, bash, git, and curl via apt-get (Debian base image)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    python3-pip \
+    python3-dev \
+    bash \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 # Copy requirements & install python dependencies
 COPY requirements.txt .
-RUN python3 -m pip install --no-cache-dir -r requirements.txt --break-system-packages
+RUN pip3 install --no-cache-dir -r requirements.txt --break-system-packages || pip install --no-cache-dir -r requirements.txt
 
 # Copy project files
 COPY . .
