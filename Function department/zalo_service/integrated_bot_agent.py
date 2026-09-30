@@ -159,6 +159,7 @@ class IntegratedZaloBotAgent:
                         ]
                         return "\n".join(resp)
                     else:
+                        sheets_warning_text = 'ĐÃ GHI NHẬN CẢNH BÁO "ĐANG SỬA LẠI" 🔴' if sheets_updated else 'Trạng thái: Đang sửa lại 🔴'
                         resp = [
                             "⚠️ **[CẢNH BÁO THẨM ĐỊNH AI: TỆP NỘP CHƯA KHỚP NỘI DUNG]**",
                             f"👤 Người nộp: **{sender_name}**",
@@ -168,7 +169,7 @@ class IntegratedZaloBotAgent:
                             f"🔴 **Lý do sai lệch:** {discrepancy if discrepancy else 'Nội dung hoặc trích yếu văn bản chưa khớp với sản phẩm yêu cầu của nhiệm vụ'}",
                             f"💡 Nhận xét AI: {ai_comment}",
                             "────────────────────────────",
-                            f"📊 **Bảng giao việc Google Sheets:** {'ĐÃ GHI NHẬN CẢNH BÁO \"ĐANG SỬA LẠI\" 🔴' if sheets_updated else 'Trạng thái: Đang sửa lại 🔴'}",
+                            f"📊 **Bảng giao việc Google Sheets:** {sheets_warning_text}",
                             "👉 Đề nghị chuyên viên rà soát lại văn bản trước khi nộp lại hoặc báo cáo Lãnh đạo nếu có chỉ đạo thay đổi."
                         ]
                         return "\n".join(resp)
