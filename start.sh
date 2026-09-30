@@ -4,17 +4,19 @@ echo "🚀 CLOUD INTEGRATED N8N + ZALO BOT AGENT ENGINE"
 echo "=================================================="
 
 # Port & Address Binding
-export N8N_PORT=${PORT:-10000}
+export PORT=10000
+export N8N_PORT=10000
 export N8N_HOST=0.0.0.0
 export N8N_LISTEN_ADDRESS=0.0.0.0
 export N8N_WEBHOOK_URL=https://zalo-bot-ppp-service.onrender.com
 export WEBHOOK_URL=https://zalo-bot-ppp-service.onrender.com
 export N8N_EDITOR_BASE_URL=https://zalo-bot-ppp-service.onrender.com
 
-# Memory & Task Runner Optimization (Set runners mode external to prevent internal task broker DB lock & timeouts)
+# Memory & Task Runner Configuration
 export NODE_OPTIONS="--max-old-space-size=384"
 export WEB_CONCURRENCY=1
 export N8N_RUNNERS_MODE=external
+export N8N_RUNNERS_AUTH_TOKEN="alexander_ppp_task_runner_secret_2026"
 export N8N_UNVERIFIED_PACKAGES_ENABLED=true
 export N8N_RUNNERS_TASK_TIMEOUT=300
 export N8N_COMPRESSION_NODE_MAX_DECOMPRESSED_SIZE_BYTES=2147483648
