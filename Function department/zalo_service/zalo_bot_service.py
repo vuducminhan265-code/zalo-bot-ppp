@@ -337,7 +337,20 @@ def poll_bot(bot_key: str):
             continue
         except Exception as e:
             print(f"❌ [{bot_key.upper()}] Polling loop exception: {e}", flush=True)
-            time.sleep(2)
+def keep_alive_ping():
+    """Tiến trình tự động gửi HTTP ping mỗi 10 phút để giữ cho Render Web Service luôn hoạt động 24/7, tránh bị ngủ đông (Spin-down)."""
+    web_url = os.getenv("N8N_WEBHOOK_URL") or "https://zalo-bot-ppp-service.onrender.com"
+    time.sleep(60)  # Chờ 1 phút cho n8n hoàn tất khởi động hẳn
+    print(f"📡 [KEEP-ALIVE] Kích hoạt tiến trình tự động duy trì 24/7 cho Render Web Service: {web_url}", flush=True)
+    while True:
+        try:
+            r = requests.get(f"{web_url}/healthz", timeout=15)
+            if r.status_code not in [200, 302]:
+                r = requests.get(web_url, timeout=15)
+            print(f"[{datetime.now().strftime('%H:%M:%S')}][KEEP-ALIVE] ⚡ Self-ping thành công -> Status: {r.status_code}", flush=True)
+        except Exception as e:
+            print(f"⚠️ [KEEP-ALIVE Notice]: {e}", flush=True)
+        time.sleep(600)  # Ping tự động mỗi 10 phút (600 giây)
 
 def start_bot_service():
     print("==================================================", flush=True)
@@ -345,11 +358,14 @@ def start_bot_service():
     print(f"⏰ Khởi động lúc: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", flush=True)
     print("==================================================", flush=True)
     
-    # Kích hoạt 2 tiến trình Polling độc lập cho Bot 1 & Bot 2 ngầm 24/7
+    # Kích hoạt 2 tiến trình Polling độc lập cho Bot 1 & Bot 2 + 1 tiến trình Keep-Alive ngầm 24/7
     t1 = threading.Thread(target=poll_bot, args=("bot1",), daemon=True)
     t2 = threading.Thread(target=poll_bot, args=("bot2",), daemon=True)
+    t_ping = threading.Thread(target=keep_alive_ping, daemon=True)
+    
     t1.start()
     t2.start()
+    t_ping.start()
 
     # Giữ main thread sống
     while True:
