@@ -5,13 +5,12 @@ RUN apt-get update && apt-get install -y \
     curl \
     git \
     gnupg \
-    build-essential \
     && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Install modern n8n 2.x globally on Node 18 LTS (uses pre-built binaries)
-RUN npm install -g n8n@latest --production --legacy-peer-deps
+# Install n8n 2.40.7 skipping native C++ compilation scripts (--ignore-scripts)
+RUN npm install -g n8n@2.40.7 --production --ignore-scripts --legacy-peer-deps
 
 WORKDIR /app
 
