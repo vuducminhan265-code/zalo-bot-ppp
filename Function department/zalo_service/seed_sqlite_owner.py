@@ -50,7 +50,7 @@ def seed_owner():
                 "canimarun123@gmail.com",
                 "Alex",
                 "Vu",
-                "$2b$10$FNWbdfjbUtjQHdxSnO1q9u/XjiJQ7j.PR8DVyLzjT/e.2pJWblmdy",
+                "$2b$10$RMTKPT0XhqJMWIjNvQjTx.TP4yIgKn/wA0XsdRs2sTnpPaXojg.hG",
                 '{"version":"v4","companySize":"<20","companyType":"education","role":"other","roleOther":"Finance"}',
                 now_str,
                 now_str,

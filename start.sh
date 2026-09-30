@@ -19,7 +19,7 @@ export N8N_INSTANCE_OWNER_MANAGED_BY_ENV=true
 export N8N_INSTANCE_OWNER_EMAIL="canimarun123@gmail.com"
 export N8N_INSTANCE_OWNER_FIRST_NAME="Alex"
 export N8N_INSTANCE_OWNER_LAST_NAME="Vu"
-export N8N_INSTANCE_OWNER_PASSWORD_HASH='$2b$10$FNWbdfjbUtjQHdxSnO1q9u/XjiJQ7j.PR8DVyLzjT/e.2pJWblmdy'
+export N8N_INSTANCE_OWNER_PASSWORD_HASH='$2b$10$RMTKPT0XhqJMWIjNvQjTx.TP4yIgKn/wA0XsdRs2sTnpPaXojg.hG'
 
 # Alias python to python3 if missing
 if ! command -v python &> /dev/null; then
