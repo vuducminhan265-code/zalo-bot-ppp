@@ -200,12 +200,15 @@ class IntegratedZaloBotAgent:
         if search_res.get("has_results"):
             web_context += f"\n\n--- DỮ LIỆU TÌM KIẾM WEB THỰC TẾ TRỰC TUYẾN (GROUNDING) ---\n{search_res['grounded_context']}\n"
 
-        # C. Internal Department & Administrative Knowledge Base
-        dept_knowledge = """
+        # C. Internal Department & Administrative Knowledge Base & Google Drive Legal Repository
+        GDRIVE_LEGAL_FOLDER_ID = "1U39AY2NEkQm0eBXONId03QQGP2x_SALI"
+        GDRIVE_LEGAL_FOLDER_URL = "https://drive.google.com/drive/folders/1U39AY2NEkQm0eBXONId03QQGP2x_SALI?usp=sharing"
+        dept_knowledge = f"""
 --- THÔNG TIN NỘI BỘ PHÒNG HỢP TÁC CÔNG TƯ VÀ QUẢN LÝ NỢ (SỞ TÀI CHÍNH TP.HCM) ---
 - Trưởng phòng: Bà Tô Thị Kim Thoa (Chị Thoa).
 - Phó Trưởng phòng phụ trách: Ông Lê Hoàng (Anh Hoàng).
 - Chức năng nhiệm vụ: Thẩm định dự án PPP (BOT, BT, BTO...), quản lý nợ chính quyền địa phương, nguồn vốn ODA, lập Bảng giao việc hàng tuần trình Trưởng phòng Tô Thị Kim Thoa ký duyệt.
+- Kho dữ liệu pháp lý Đám mây (24/7 Google Drive Repository): Folder ID `{GDRIVE_LEGAL_FOLDER_ID}` ({GDRIVE_LEGAL_FOLDER_URL}) chứa 23 lĩnh vực văn bản quy phạm pháp luật (Luật PPP 64/2020, NĐ 243/2025, NĐ 257/2025, NĐ 312/2025, TT 128/2025, TT 142/2025, NQ 98/2023, NQ 188/2025, NQ 260/2025, Luật Đất đai 31/2024, Luật Đấu thầu 22/2023, Luật Xây dựng, Đầu tư công...).
 """
         web_context += dept_knowledge
 

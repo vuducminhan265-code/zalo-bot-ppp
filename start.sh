@@ -15,6 +15,7 @@ export N8N_INSTANCE_OWNER_MANAGED_BY_ENV=true
 export N8N_INSTANCE_OWNER_EMAIL=canimarun123@gmail.com
 export N8N_INSTANCE_OWNER_FIRST_NAME=Alex
 export N8N_INSTANCE_OWNER_LAST_NAME=Vu
+export N8N_INSTANCE_OWNER_PASSWORD="Password123@AlexVu"
 export N8N_INSTANCE_OWNER_PASSWORD_HASH='$2b$10$e73b6d3a305a62e73b6d3uW.r.Yg.k9Vv8pQ.zQ'
 
 # 1. Clean slate migration, Seed Credentials & Workflow Import
@@ -22,7 +23,8 @@ echo "📥 Auto-importing Gemini Credentials & Zalo AI Agent Workflow into Cloud
 python "Function department/zalo_service/generate_n8n_credentials.py" || true
 n8n import:credentials --input="/app/Function department/zalo_service/n8n_credentials.json" || true
 rm -f "/app/Function department/zalo_service/n8n_credentials.json" || true
-n8n import:workflow --input="/app/Function department/zalo_service/zalo_n8n_workflow_template.json" || true
+n8n import:workflow --input="/app/Function department/zalo_service/n8n_workflow_bot1_tasks.json" || true
+n8n import:workflow --input="/app/Function department/zalo_service/n8n_workflow_bot2_legal.json" || true
 n8n update:workflow --all --active=true || true
 
 # 2. Start Zalo Bot Python Agent Service in background (Long-Polling 24/7)

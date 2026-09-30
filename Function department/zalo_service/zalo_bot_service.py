@@ -29,7 +29,7 @@ load_dotenv()
 BOT_TOKEN = os.getenv("ZALO_BOT_TOKEN", "1175912593990733827:IQHQDAkiFOfwODzTmEKdPvfCSbDJubszVeLXcvxwqTSZXPbNaBaTLYQAmeXpAWMX")
 BASE_URL = f"https://bot-api.zaloplatforms.com/bot{BOT_TOKEN}"
 import base64
-DEFAULT_GEMINI_KEY = base64.b64decode("QVEuQWI4Uk42THE0UVF6NzRkbmNHa0d6SzVmYVBfdl9RSDRSMGphTnVtYi1ibkVSS3JNZUE=").decode()
+DEFAULT_GEMINI_KEY = base64.b64decode("QVEuQWI4Uk42SkZGZ2ZDdDJ6OVc4WV8yVEZUckV6ck9SY284Y1FoTjRLTmc5MjV3ZmdwSkE=").decode()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or DEFAULT_GEMINI_KEY
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
