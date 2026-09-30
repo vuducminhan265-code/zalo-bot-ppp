@@ -9,8 +9,8 @@ RUN apt-get update && apt-get install -y \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Install n8n globally
-RUN npm install -g n8n@1.75.2 --production
+# Install modern n8n globally (v2.x with N8N_INSTANCE_OWNER_MANAGED_BY_ENV support)
+RUN npm install -g n8n@latest --production
 
 WORKDIR /app
 
@@ -28,7 +28,6 @@ RUN chmod +x /app/start.sh
 ENV PORT=10000
 ENV N8N_PORT=10000
 ENV N8N_HOST=0.0.0.0
-ENV N8N_USER_MANAGEMENT_DISABLED=true
 ENV N8N_BASIC_AUTH_ACTIVE=false
 ENV N8N_DIAGNOSTICS_ENABLED=false
 ENV N8N_VERSION_NOTIFICATIONS_ENABLED=false
