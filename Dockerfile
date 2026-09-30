@@ -2,20 +2,18 @@ FROM n8nio/n8n:latest
 
 USER root
 
-# Install Python 3, pip, bash, git, and curl via apt-get (Debian)
-RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
-    bash \
-    curl \
-    git \
-    && rm -rf /var/lib/apt/lists/*
+# Universal package manager detection for Python 3 & tools (Alpine vs Debian/Ubuntu)
+RUN if command -v apk > /dev/null; then \
+        apk add --no-cache python3 py3-pip bash curl git; \
+    elif command -v apt-get > /dev/null; then \
+        apt-get update && apt-get install -y python3 python3-pip bash curl git && rm -rf /var/lib/apt/lists/*; \
+    fi
 
 WORKDIR /app
 
 # Copy requirements & install python dependencies
 COPY requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt --break-system-packages || pip install --no-cache-dir -r requirements.txt
+RUN python3 -m pip install --no-cache-dir -r requirements.txt --break-system-packages || pip install --no-cache-dir -r requirements.txt
 
 # Copy project files
 COPY . .
