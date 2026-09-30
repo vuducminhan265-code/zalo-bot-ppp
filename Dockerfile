@@ -23,6 +23,10 @@ RUN N8N_DIR=$(dirname $(dirname $(which n8n)))/lib/node_modules/n8n; \
 
 WORKDIR /app
 
+# Create virtual environment and set PATH to isolate Python dependencies
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
 # Copy requirements & install python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
