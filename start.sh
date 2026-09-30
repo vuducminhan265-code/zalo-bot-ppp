@@ -9,6 +9,10 @@ export N8N_HOST=0.0.0.0
 export N8N_LISTEN_ADDRESS=0.0.0.0
 export WEBHOOK_URL=https://zalo-bot-ppp-service.onrender.com
 export N8N_EDITOR_BASE_URL=https://zalo-bot-ppp-service.onrender.com
+# Memory Optimization for Render Free Tier (512MB RAM limit)
+export NODE_OPTIONS="--max-old-space-size=320"
+export WEB_CONCURRENCY=1
+export N8N_RUNNERS_ENABLED=false
 export N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
 export N8N_BASIC_AUTH_ACTIVE=false
 export N8N_ENCRYPTION_KEY="alexander_ppp_master_encryption_key_2026"
