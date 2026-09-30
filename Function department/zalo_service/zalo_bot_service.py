@@ -337,10 +337,31 @@ def poll_bot(bot_key: str):
             continue
         except Exception as e:
             print(f"❌ [{bot_key.upper()}] Polling loop exception: {e}", flush=True)
+def run_http_health_server():
+    """Khởi chạy HTTP Server siêu nhẹ trên port 5678 cho Render Health Check 24/7 (chỉ tốn ~5MB RAM)."""
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+    port = int(os.getenv("PORT", 5678))
+    
+    class HealthHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write("✅ Zalo Bot PPP Cloud Engine 24/7 is Live & Active!".encode("utf-8"))
+        def log_message(self, format, *args):
+            return  # Tắt spam log HTTP
+
+    try:
+        server = HTTPServer(("0.0.0.0", port), HealthHandler)
+        print(f"⚡ [HTTP SERVER] Đã mở cổng {port} cho Render Health Check...", flush=True)
+        server.serve_forever()
+    except Exception as e:
+        print(f"⚠️ [HTTP Server Notice]: {e}", flush=True)
+
 def keep_alive_ping():
     """Tiến trình tự động gửi HTTP ping mỗi 10 phút để giữ cho Render Web Service luôn hoạt động 24/7, tránh bị ngủ đông (Spin-down)."""
     web_url = os.getenv("N8N_WEBHOOK_URL") or "https://zalo-bot-ppp-service.onrender.com"
-    time.sleep(60)  # Chờ 1 phút cho n8n hoàn tất khởi động hẳn
+    time.sleep(60)  # Chờ 1 phút cho HTTP Server sẵn sàng hẳn
     print(f"📡 [KEEP-ALIVE] Kích hoạt tiến trình tự động duy trì 24/7 cho Render Web Service: {web_url}", flush=True)
     while True:
         try:
@@ -353,19 +374,35 @@ def keep_alive_ping():
         time.sleep(600)  # Ping tự động mỗi 10 phút (600 giây)
 
 def start_bot_service():
+    mode = os.getenv("RUN_MODE", "dual").lower()
     print("==================================================", flush=True)
-    print("🚀 BOT PPP DUAL SERVICE - TASK MASTER & LEGAL SUPREME RAG", flush=True)
+    print(f"🚀 BOT PPP SERVICE ENGINE - MODE: {mode.upper()}", flush=True)
     print(f"⏰ Khởi động lúc: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", flush=True)
     print("==================================================", flush=True)
     
-    # Kích hoạt 2 tiến trình Polling độc lập cho Bot 1 & Bot 2 + 1 tiến trình Keep-Alive ngầm 24/7
-    t1 = threading.Thread(target=poll_bot, args=("bot1",), daemon=True)
-    t2 = threading.Thread(target=poll_bot, args=("bot2",), daemon=True)
+    # 1. Khởi chạy HTTP Server cho Render Port Scanner
+    t_http = threading.Thread(target=run_http_health_server, daemon=True)
+    t_http.start()
+
+    # 2. Khởi chạy Keep-Alive Self Ping
     t_ping = threading.Thread(target=keep_alive_ping, daemon=True)
-    
-    t1.start()
-    t2.start()
     t_ping.start()
+
+    # 3. Kích hoạt Bot theo chế độ RUN_MODE (bot1_only, bot2_only, hoặc dual)
+    if mode in ["bot1_only", "cloud"]:
+        print("📌 Chạy chế độ CLOUD: Chỉ vận hành Bot 1 (Task Master 24/7)", flush=True)
+        t1 = threading.Thread(target=poll_bot, args=("bot1",), daemon=True)
+        t1.start()
+    elif mode in ["bot2_only", "local"]:
+        print("📌 Chạy chế độ LOCAL PC: Chỉ vận hành Bot 2 (Bot Giáo sư PPP)", flush=True)
+        t2 = threading.Thread(target=poll_bot, args=("bot2",), daemon=True)
+        t2.start()
+    else:
+        print("📌 Chạy chế độ DUAL: Vận hành song song Bot 1 & Bot 2", flush=True)
+        t1 = threading.Thread(target=poll_bot, args=("bot1",), daemon=True)
+        t2 = threading.Thread(target=poll_bot, args=("bot2",), daemon=True)
+        t1.start()
+        t2.start()
 
     # Giữ main thread sống
     while True:

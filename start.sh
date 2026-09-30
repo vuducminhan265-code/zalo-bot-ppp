@@ -1,57 +1,19 @@
 #!/bin/bash
 echo "=================================================="
-echo "🚀 CLOUD INTEGRATED N8N + ZALO BOT AGENT ENGINE"
+echo "🚀 LIGHTWEIGHT CLOUD ZALO BOT ENGINE (HYBRID MODE)"
 echo "=================================================="
 
 # Port & Address Binding - Strictly match Render PORT env var (5678)
 export PORT=${PORT:-5678}
-export N8N_PORT=${PORT}
-export N8N_LISTEN_PORT=${PORT}
-export N8N_HOST=0.0.0.0
-export N8N_LISTEN_ADDRESS=0.0.0.0
 export N8N_WEBHOOK_URL=https://zalo-bot-ppp-service.onrender.com
-export N8N_EDITOR_BASE_URL=https://zalo-bot-ppp-service.onrender.com
 
-# Memory & Task Runner Configuration (Cap V8 heap at 320MB for Render 512MB RAM limit)
-export NODE_OPTIONS="--max-old-space-size=320"
-export WEB_CONCURRENCY=1
-export N8N_RUNNERS_MODE=external
-export N8N_RUNNERS_AUTH_TOKEN="alexander_ppp_task_runner_secret_2026"
-export N8N_UNVERIFIED_PACKAGES_ENABLED=true
-export N8N_RUNNERS_TASK_TIMEOUT=300
-export N8N_COMPRESSION_NODE_MAX_DECOMPRESSED_SIZE_BYTES=2147483648
-export N8N_COMPRESSION_NODE_MAX_ZIP_ENTRIES=5000
-export N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
-export N8N_BASIC_AUTH_ACTIVE=false
-export N8N_DIAGNOSTICS_ENABLED=false
-export N8N_VERSION_NOTIFICATIONS_ENABLED=false
-export N8N_PERSONALIZATION_ENABLED=false
-export N8N_ENCRYPTION_KEY="alexander_ppp_master_encryption_key_2026"
-
-# Native Owner Auto-Provisioning (n8n 2.x+) - Set to false to allow password edits via Web UI
-export N8N_INSTANCE_OWNER_MANAGED_BY_ENV=false
-export N8N_INSTANCE_OWNER_EMAIL="canimarun123@gmail.com"
-export N8N_INSTANCE_OWNER_FIRST_NAME="Alex"
-export N8N_INSTANCE_OWNER_LAST_NAME="Vu"
-export N8N_INSTANCE_OWNER_PASSWORD_HASH='$2b$10$RMTKPT0XhqJMWIjNvQjTx.TP4yIgKn/wA0XsdRs2sTnpPaXojg.hG'
+# Cloud Mode: Run Bot 1 (Task Master 24/7) + HTTP Server + KeepAlive
+export RUN_MODE="bot1_only"
 
 # Alias python to python3 if missing
 if ! command -v python &> /dev/null; then
     alias python=python3
 fi
 
-# 1. Auto-import Credentials & Workflows
-echo "📥 Auto-importing Gemini Credentials & Zalo AI Agent Workflows into Cloud n8n..."
-python3 "Function department/zalo_service/generate_n8n_credentials.py" || true
-n8n import:credentials --input="/app/Function department/zalo_service/n8n_credentials.json" || true
-rm -f "/app/Function department/zalo_service/n8n_credentials.json" || true
-n8n import:workflow --input="/app/Function department/zalo_service/n8n_workflow_bot1_tasks.json" || true
-n8n import:workflow --input="/app/Function department/zalo_service/n8n_workflow_bot2_legal.json" || true
-
-# 2. Start Zalo Bot Python Agent Service in background (Long-Polling 24/7)
-echo "🤖 Starting Zalo Bot Python Agent Service in background..."
-python3 "Function department/zalo_service/zalo_bot_service.py" &
-
-# 3. Start n8n natively as main process
-echo "⚡ Starting n8n natively on port ${N8N_PORT}..."
-exec n8n start
+echo "🤖 Starting Zalo Bot 1 Task Master Cloud Engine on port ${PORT}..."
+exec python3 "Function department/zalo_service/zalo_bot_service.py"
