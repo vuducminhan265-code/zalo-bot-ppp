@@ -28,8 +28,8 @@ export N8N_VERSION_NOTIFICATIONS_ENABLED=false
 export N8N_PERSONALIZATION_ENABLED=false
 export N8N_ENCRYPTION_KEY="alexander_ppp_master_encryption_key_2026"
 
-# Native Owner Auto-Provisioning (n8n 2.x+)
-export N8N_INSTANCE_OWNER_MANAGED_BY_ENV=true
+# Native Owner Auto-Provisioning (n8n 2.x+) - Set to false to allow password edits via Web UI
+export N8N_INSTANCE_OWNER_MANAGED_BY_ENV=false
 export N8N_INSTANCE_OWNER_EMAIL="canimarun123@gmail.com"
 export N8N_INSTANCE_OWNER_FIRST_NAME="Alex"
 export N8N_INSTANCE_OWNER_LAST_NAME="Vu"
