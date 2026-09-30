@@ -1,16 +1,16 @@
 FROM python:3.11-slim
 
-# Install system dependencies & Node.js 18 LTS
+# Install system dependencies & Node.js 20.x
 RUN apt-get update && apt-get install -y \
     curl \
     git \
     gnupg \
-    && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Install n8n 2.40.7 skipping native C++ compilation scripts (--ignore-scripts)
-RUN npm install -g n8n@2.40.7 --production --ignore-scripts --legacy-peer-deps
+# Install modern n8n 2.x globally on Node 20.x (skipping C++ build scripts via --ignore-scripts)
+RUN npm install -g n8n@latest --production --ignore-scripts --legacy-peer-deps
 
 WORKDIR /app
 
