@@ -284,6 +284,11 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
 
 def poll_bot(bot_key: str):
     """Tiến trình duy trì Long-Polling cho từng Bot Zalo độc lập 24/7."""
+    is_cloud = bool(os.getenv("RENDER")) or bool(os.getenv("RENDER_SERVICE_ID")) or ("onrender.com" in os.getenv("RENDER_EXTERNAL_URL", ""))
+    if bot_key == "bot2" and is_cloud:
+        print("⛔ [SECURITY GUARD] Bot 2 (Legal RAG) is FORBIDDEN on Cloud/Render instances. Polling aborted.", flush=True)
+        return
+
     bot_cfg = BOTS.get(bot_key)
     base_url = bot_cfg["base_url"]
     
