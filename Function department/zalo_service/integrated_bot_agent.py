@@ -196,8 +196,17 @@ class IntegratedZaloBotAgent:
             except Exception as e:
                 print(f"Notice: Live tasks injection error -> {e}")
 
-        # B. Multi-Engine Web Search Grounding (Live Internet Search)
-        search_res = self.web_grounder.ground_query(user_text) if self.web_grounder else {"has_results": False}
+        # B. Multi-Engine Web Search Grounding (Live Internet Search with Context Memory)
+        search_target = user_text
+        if chat_history and len(user_text.split()) <= 4:
+            for past in reversed(chat_history):
+                if past.get("role") == "user":
+                    past_txt = past.get("parts", [{}])[0].get("text", "")
+                    if len(past_txt.split()) > 3:
+                        search_target = f"{past_txt} {user_text}"
+                        break
+
+        search_res = self.web_grounder.ground_query(search_target) if self.web_grounder else {"has_results": False}
         if search_res.get("has_results"):
             web_context += f"\n\n--- DỮ LIỆU TÌM KIẾM WEB THỰC TẾ TRỰC TUYẾN (GROUNDING) ---\n{search_res['grounded_context']}\n"
 
@@ -243,13 +252,24 @@ Thành viên: {sender_name} hỏi: "{user_text}"
 {web_context}
 
 Yêu cầu trả lời BẮT BUỘC:
-- ĐỐI VỚI CÁC CÂU HỎI VỀ TIẾN ĐỘ, CON SỐ, HOẶC NHIỆM VỤ CỦA CHUYÊN VIÊN (như "anh Hận còn mấy cái chưa xong", "anh Hòa có task gì"): BẮT BUỘC đọc và trích dẫn trực tiếp dữ liệu từ mục 'DỮ LIỆU BẢNG GIAO VIỆC GOOGLE WORKSPACE (LIVE TASKS DATA)' ở trên để trả lời chính xác số lượng, tên nhiệm vụ và hạn hoàn thành.
-- TUYỆT ĐỐI KHÔNG SUY DIỄN THÔNG TIN KHI CHƯA CÓ CĂN CỨ VĂN BẢN HOẶC DỮ LIỆU THỰC TẾ.
-- TUYỆT ĐỐI KHÔNG TỰ BỊA TỶ SỐ THỂ THAO, CON SỐ TÀI CHÍNH HAY NỘI DUNG VĂN BẢN KHI DỮ LIỆU TÌM KIẾM CHƯA CÓ KẾT QUẢ CỤ THỂ. Nếu thông tin trận đấu/tin tức chưa có trong dữ liệu tìm kiếm web ở trên, BẮT BUỘC trả lời: "Dạ chào Anh/Chị chuyên viên, hiện tại dữ liệu trực tuyến chưa cập nhật kết quả chính thức cho thông tin này. Anh/Chị có thể thử lại sau hoặc cung cấp thêm thông tin chi tiết ạ."
-- TUYỆT ĐỐI KHÔNG in ra các thẻ hệ thống hay dòng cấu hình nội bộ.
-- Luôn giữ thái độ lịch sự, chuyên nghiệp, chuẩn mực văn phong hành chính nhà nước.
-- TUYỆT ĐỐI KHÔNG dùng từ lóng, xưng "bro", "bạn ơi", "tự tìm đi" hay viết các đoạn giải thích phân trần dài dòng trong ngoặc đơn.
-- Trình bày Markdown rõ ràng trên Zalo."""
+1. ĐỊNH DẠNG ZALO CHUẨN: Giao diện Zalo KHÔNG hỗ trợ định dạng Markdown (như **in đậm**, *in nghiêng*, ### tiêu đề). BẮT BUỘC KHÔNG DÙNG các ký tự `**`, `*`, `###` trong toàn bộ câu trả lời. Dùng các ký tự đầu dòng như `•`, `+`, `📌`, `👉` và xuống dòng phân đoạn rõ ràng, trình bày đẹp mắt, trang trọng, chuẩn văn phong công vụ.
+2. ĐI THẲNG VÀO CÂU TRẢ LỜI NGAY DÒNG ĐẦU TIÊN: Trả lời trực tiếp kết quả/nội dung điều luật/chức vụ ngay ở câu đầu tiên. Tuyệt đối KHÔNG viết các câu dẫn dài dòng, câu xin lỗi hay câu từ chối né tránh.
+3. ĐỐI VỚI CÁC CÂU HỎI TIN TỨC, THỂ THAO, GIÁ CẢ: Đọc kỹ dữ liệu từ 'DỮ LIỆU TÌM KIẾM WEB THỰC TẾ TRỰC TUYẾN' để trích xuất chính xác.
+4. ĐỐI VỚI CÁC CÂU HỎI VỀ TIẾN ĐỘ, TASK CHUYÊN VIÊN: Đọc và trích dẫn trực tiếp từ 'DỮ LIỆU BẢNG GIAO VIỆC GOOGLE WORKSPACE'.
+5. ĐỐI VỚI CÁC CÂU HỎI PHÁP LÝ PPP / ĐIỀU LUẬT: Đọc và trích dẫn chính xác Điều/Khoản từ 'KHO TÀI LIỆU NỘI BỘ (RAG VECTOR CORPUS)'.
+6. Kết thúc bằng câu ngắn gọn: "Trân trọng." hoặc "Kính báo Anh/Chị chuyên viên."."""
+
+        def sanitize_zalo_text(raw_txt: str) -> str:
+            if not raw_txt: return ""
+            # Strip markdown bold/italics symbols
+            t = re.sub(r'\*\*(.*?)\*\*', r'\1', raw_txt)
+            t = re.sub(r'\*(.*?)\*', r'\1', t)
+            t = re.sub(r'_(.*?)_', r'\1', t)
+            t = re.sub(r'^#{1,6}\s*(.*)', r'📌 \1', t, flags=re.MULTILINE)
+            t = re.sub(r'^\s*[\-\*]\s+', '• ', t, flags=re.MULTILINE)
+            t = re.sub(r'`(.*?)`', r'\1', t)
+            t = re.sub(r'\n{3,}', '\n\n', t)
+            return t.strip()
 
         # 5. Gemini Synthesis Engine with Low-Temperature (0.0) Zero-Hallucination Config (Optimized Lite Models Only)
         gen_config = types.GenerateContentConfig(
@@ -265,16 +285,16 @@ Yêu cầu trả lời BẮT BUỘC:
                     if resp.text and resp.text.strip():
                         ans = resp.text.strip()
                         if not any(refusal in ans for refusal in ["hệ thống bot không thể đồng bộ", "bạn có thể tự tìm", "do dữ liệu biến động từng giây", "Em xin phép sẽ cập nhật"]):
-                            return ans
+                            return sanitize_zalo_text(ans)
                 except Exception as e:
                     continue
 
         # 6. Fallback Execution
         openclaw_ans = self.call_openclaw_agent(user_text)
         if openclaw_ans and not any(refusal in openclaw_ans for refusal in ["hệ thống bot không thể đồng bộ", "bạn có thể tự tìm", "do dữ liệu biến động từng giây"]):
-            return openclaw_ans
+            return sanitize_zalo_text(openclaw_ans)
 
-        return f"Dạ chào Anh/Chị chuyên viên, hiện tại hệ thống chưa tìm thấy dữ liệu chính thức cho thông tin '{user_text}'. Anh/Chị vui lòng cung cấp thêm số hiệu hoặc trích yếu văn bản để hệ thống tra cứu chính xác ạ."
+        return sanitize_zalo_text(f"Dạ chào Anh/Chị chuyên viên, hiện tại hệ thống chưa tìm thấy dữ liệu chính thức cho thông tin '{user_text}'. Anh/Chị vui lòng cung cấp thêm số hiệu hoặc trích yếu văn bản để hệ thống tra cứu chính xác ạ.")
 
 if __name__ == "__main__":
     agent = IntegratedZaloBotAgent()

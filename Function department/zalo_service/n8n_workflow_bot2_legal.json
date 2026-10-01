@@ -21,21 +21,21 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "{\n  \"status\": \"success\"\n}",
+        "responseBody": "{\n  \"status\": \"success\",\n  \"output\": \"{{ $json.output }}\"\n}",
         "options": {}
       },
       "id": "respond-webhook",
       "name": "Respond to Zalo Webhook",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [440, 180]
+      "position": [840, 400]
     },
     {
       "parameters": {
         "promptType": "custom",
         "text": "={{ $json.body?.message?.text || $json.body?.text || $json.text || 'Xin chào' }}",
         "options": {
-          "systemMessage": "Bạn là Chuyên gia AI Cao cấp Trích xuất Pháp lý & Nghiên cứu Pháp luật của phòng Hợp tác Công tư & Quản lý Nợ (PPP & QLN), Sở Tài chính TP.HCM.\n- Đi thẳng vào trọng tâm, lý luận sắc bén, lập luận căn cứ theo đúng Điều, Khoản văn bản pháp quy.\n- Tự động gọi 'Legal Knowledge Vector Store (Google Drive 23 Lĩnh vực Luật)' khi trích dẫn văn bản quy phạm pháp luật trong Google Drive Folder ID 1U39AY2NEkQm0eBXONId03QQGP2x_SALI (Luật PPP, NĐ 243/2025, NĐ 257/2025, NQ 98/2023, NQ 260/2025, Đất đai, Đầu tư công, Xây dựng...).\n- Tự động gọi 'Gemini NotebookLM Workspace' để truy vấn tri thức tổng hợp chuyên sâu từ Gemini NotebookLM AI.\n- Tự động gọi 'Google Web Search Grounding' khi tra cứu tin tức thời gian thực, giá cả, thời sự và quy định pháp luật mới nhất."
+          "systemMessage": "Bạn là Chuyên gia AI Cao cấp Trích xuất Pháp lý & Nghiên cứu Pháp luật của phòng Hợp tác Công tư & Quản lý Nợ (PPP & QLN), Sở Tài chính TP.HCM.\n- Giao diện Zalo KHÔNG hỗ trợ Markdown. KHÔNG dùng ký tự **, *, ### trong câu trả lời.\n- Đi thẳng vào trọng tâm, lý luận sắc bén, lập luận căn cứ theo đúng Điều, Khoản văn bản pháp quy.\n- Tự động gọi 'Legal Knowledge Vector Store (Google Drive 23 Lĩnh vực Luật)' khi trích dẫn văn bản quy phạm pháp luật trong Google Drive Folder ID 1U39AY2NEkQm0eBXONId03QQGP2x_SALI.\n- Tự động gọi 'Google Web Search Grounding' khi tra cứu tin tức thời gian thực."
         }
       },
       "id": "ai-legal-agent",
@@ -102,7 +102,7 @@
     {
       "parameters": {
         "name": "Gemini_NotebookLM_Workspace",
-        "description": "Tra cứu tri thức tổng hợp chuyên sâu từ Gemini NotebookLM AI 'Learning PPP' do Anh Alexander biên soạn tại URL https://notebooklm.google.com/notebook/f67bfdbc-f161-42a5-b5f6-5858e16c8ae2 (Notebook ID: f67bfdbc-f161-42a5-b5f6-5858e16c8ae2 / learning-ppp) để truy vấn tri thức đối soát tổng hợp, lý luận pháp lý và phương án tài chính dự án PPP.",
+        "description": "Tra cứu tri thức tổng hợp chuyên sâu từ Gemini NotebookLM AI 'Learning PPP' do Anh Alexander biên soạn tại URL https://notebooklm.google.com/notebook/f67bfdbc-f161-42a5-b5f6-5858e16c8ae2.",
         "language": "javaScript",
         "jsCode": "const question = $fromAI('question', 'Nội dung tra cứu tri thức tổng hợp trên Gemini NotebookLM AI');\nreturn JSON.stringify({ action: 'notebooklm_workspace_search', notebook_url: 'https://notebooklm.google.com/notebook/f67bfdbc-f161-42a5-b5f6-5858e16c8ae2', notebook_id: 'f67bfdbc-f161-42a5-b5f6-5858e16c8ae2', question: question });"
       },
@@ -111,32 +111,12 @@
       "type": "@n8n/n8n-nodes-langchain.toolCode",
       "typeVersion": 1,
       "position": [1000, 600]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://bot-api.zaloplatforms.com/bot916808225583576762:qyESEAzJfULNqmolAsxDwfskYoEhQXPDNPytmKbTOeFquMpnOkmLQOURsBEgJDln/sendMessage",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"chat_id\": \"{{ $('Zalo Legal Webhook Inbound').item.json.body?.chat_id || $('Zalo Legal Webhook Inbound').item.json.body?.sender?.id || $('Zalo Legal Webhook Inbound').item.json.chat_id }}\",\n  \"text\": \"{{ $json.output }}\",\n  \"parse_mode\": \"markdown\"\n}",
-        "options": {}
-      },
-      "id": "send-zalo-legal-reply",
-      "name": "Send Zalo Legal Reply",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [900, 400]
     }
   ],
   "connections": {
     "Zalo Legal Webhook Inbound": {
       "main": [
         [
-          {
-            "node": "Respond to Zalo Webhook",
-            "type": "main",
-            "index": 0
-          },
           {
             "node": "AI Agent (Legal & Web Search Specialist)",
             "type": "main",
@@ -204,7 +184,7 @@
       "main": [
         [
           {
-            "node": "Send Zalo Legal Reply",
+            "node": "Respond to Zalo Webhook",
             "type": "main",
             "index": 0
           }

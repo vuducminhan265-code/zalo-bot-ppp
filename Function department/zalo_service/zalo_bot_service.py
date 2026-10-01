@@ -95,25 +95,33 @@ def call_gemini(chat_id: str, prompt: str, sender_name: str = "Chuyên viên") -
     add_chat_message(chat_id, "model", answer)
     return answer
 
+def sanitize_zalo_text(raw_txt: str) -> str:
+    if not raw_txt: return ""
+    # Strip markdown bold/italics symbols
+    t = re.sub(r'\*\*(.*?)\*\*', r'\1', raw_txt)
+    t = re.sub(r'\*(.*?)\*', r'\1', t)
+    t = re.sub(r'_(.*?)_', r'\1', t)
+    t = re.sub(r'^#{1,6}\s*(.*)', r'📌 \1', t, flags=re.MULTILINE)
+    t = re.sub(r'^\s*[\-\*]\s+', '• ', t, flags=re.MULTILINE)
+    t = re.sub(r'`(.*?)`', r'\1', t)
+    t = re.sub(r'\n{3,}', '\n\n', t)
+    return t.strip()
+
 def send_zalo_message(chat_id: str, text: str, bot_key: str = "bot1"):
     """Gửi tin nhắn phản hồi qua Zalo Bot API tương ứng với bot_key."""
     bot_cfg = BOTS.get(bot_key, BOTS["bot1"])
     base_url = bot_cfg["base_url"]
+    clean_text = sanitize_zalo_text(text)
     try:
         url = f"{base_url}/sendMessage"
-        chunks = [text[i:i+1850] for i in range(0, len(text), 1850)]
+        chunks = [clean_text[i:i+1850] for i in range(0, len(clean_text), 1850)]
         for chunk in chunks:
             payload = {
                 "chat_id": str(chat_id),
-                "text": chunk,
-                "parse_mode": "markdown"
+                "text": chunk
             }
             resp = requests.post(url, json=payload, timeout=10)
             res_json = resp.json()
-            if not res_json.get("ok") and res_json.get("error_code") == 400:
-                payload.pop("parse_mode", None)
-                requests.post(url, json=payload, timeout=10)
-                
             print(f"[{datetime.now().strftime('%H:%M:%S')}][{bot_key.upper()}] Sent to {chat_id} -> Status: {res_json.get('ok')}", flush=True)
             time.sleep(0.3)
     except Exception as e:
@@ -259,31 +267,20 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
         send_zalo_message(chat_id, help_msg, bot_key=bot_key)
         return
 
-    # 4. Điều hướng sang n8n Webhook tương ứng (bot1 -> zalo-task-webhook, bot2 -> zalo-legal-webhook)
+    # 4. Tra cứu AI Agent độc bản (Single-Dispatch Engine: RAG + Web Grounding + Memory)
     ai_query = raw_text.replace("@Bot", "").replace("@bot", "").strip()
     if ai_query:
-        n8n_handled = False
+        print(f"--> [{bot_key.upper()}] Xử lý qua Master AI Agent (Single Dispatch): '{ai_query}'", flush=True)
+        ai_ans = call_gemini(str(chat_id), ai_query, sender_name=sender_name)
+        send_zalo_message(chat_id, ai_ans, bot_key=bot_key)
+
+        # Gửi thông tin không đồng bộ tới n8n webhook (nếu chạy) để lưu trữ log mà không phát lặp tin nhắn
         try:
             n8n_port = os.getenv("N8N_PORT") or "5678"
             n8n_url = f"http://127.0.0.1:{n8n_port}/webhook/{bot_cfg['webhook']}"
-            try:
-                n8n_resp = requests.post(n8n_url, json={"chat_id": str(chat_id), "text": ai_query, "sender_name": sender_name}, timeout=12)
-                if n8n_resp.status_code == 200 and n8n_resp.text.strip() and "not registered" not in n8n_resp.text:
-                    print(f"--> [{bot_key.upper()} Forwarded to Local/Cloud n8n Webhook via {n8n_url}]", flush=True)
-                    n8n_data = n8n_resp.json()
-                    n8n_text = n8n_data.get("output") or n8n_data.get("text") or n8n_data.get("response")
-                    if n8n_text:
-                        send_zalo_message(chat_id, str(n8n_text), bot_key=bot_key)
-                    n8n_handled = True
-            except Exception as e:
-                print(f"⚠️ [{bot_key.upper()} n8n Forwarding Notice]: {e}", flush=True)
-        except Exception as e:
-            print(f"⚠️ [{bot_key.upper()} n8n Notice]: {e}", flush=True)
-
-        if not n8n_handled:
-            print(f"--> [{bot_key.upper()}] Gửi Gemini Python Fallback (kèm context memory {chat_id}): '{ai_query}'", flush=True)
-            ai_ans = call_gemini(str(chat_id), ai_query, sender_name=sender_name)
-            send_zalo_message(chat_id, ai_ans, bot_key=bot_key)
+            threading.Thread(target=lambda: requests.post(n8n_url, json={"chat_id": str(chat_id), "text": ai_query, "sender_name": sender_name}, timeout=5), daemon=True).start()
+        except Exception:
+            pass
 
 def poll_bot(bot_key: str):
     """Tiến trình duy trì Long-Polling cho từng Bot Zalo độc lập 24/7."""
@@ -331,7 +328,7 @@ def poll_bot(bot_key: str):
                         offset = max(offset, up_id + 1)
                     msg = item.get("message") or item.get("edited_message")
                     if msg:
-                        process_message(msg, bot_key=bot_key)
+                        threading.Thread(target=process_message, args=(msg, bot_key), daemon=True).start()
                         
         except requests.exceptions.Timeout:
             continue
@@ -374,26 +371,31 @@ def keep_alive_ping():
         time.sleep(600)  # Ping tự động mỗi 10 phút (600 giây)
 
 def start_bot_service():
-    mode = os.getenv("RUN_MODE", "dual").lower()
+    is_render = bool(os.getenv("RENDER")) or bool(os.getenv("RENDER_SERVICE_ID")) or ("onrender.com" in os.getenv("RENDER_EXTERNAL_URL", ""))
+    if is_render:
+        mode = "bot1_only"
+    else:
+        mode = os.getenv("RUN_MODE", "local").lower()
+
     print("==================================================", flush=True)
-    print(f"🚀 BOT PPP SERVICE ENGINE - MODE: {mode.upper()}", flush=True)
+    print(f"🚀 ZALO BOT SERVICE ENGINE - MODE: {mode.upper()} (IS_RENDER: {is_render})", flush=True)
     print(f"⏰ Khởi động lúc: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", flush=True)
     print("==================================================", flush=True)
     
-    # 1. Khởi chạy HTTP Server & Keep-Alive ONLY khi ở chế độ CLOUD
-    if mode in ["bot1_only", "cloud"] or os.getenv("RENDER"):
+    # 1. Khởi chạy HTTP Server & Keep-Alive ONLY khi ở chế độ CLOUD (Render)
+    if is_render or mode in ["bot1_only", "cloud"]:
         t_http = threading.Thread(target=run_http_health_server, daemon=True)
         t_http.start()
         t_ping = threading.Thread(target=keep_alive_ping, daemon=True)
         t_ping.start()
 
-    # 2. Kích hoạt Bot theo chế độ RUN_MODE (bot1_only, bot2_only, hoặc dual)
-    if mode in ["bot1_only", "cloud"]:
-        print("📌 Chạy chế độ CLOUD: Chỉ vận hành Bot 1 (Task Master 24/7)", flush=True)
+    # 2. Kích hoạt Bot theo chế độ RUN_MODE (bot1_only trên Render Cloud, bot2_only/local ở máy)
+    if is_render or mode in ["bot1_only", "cloud"]:
+        print("📌 Chạy chế độ CLOUD (Render): Chỉ vận hành Bot 1 (Task Master 24/7)", flush=True)
         t1 = threading.Thread(target=poll_bot, args=("bot1",), daemon=True)
         t1.start()
     elif mode in ["bot2_only", "local"]:
-        print("📌 Chạy chế độ LOCAL PC: Chỉ vận hành Bot 2 (Bot Giáo sư PPP)", flush=True)
+        print("📌 Chạy chế độ LOCAL PC: Chỉ vận hành Bot 2 (Bot Giáo sư PPP + Master Legal RAG)", flush=True)
         t2 = threading.Thread(target=poll_bot, args=("bot2",), daemon=True)
         t2.start()
     else:
