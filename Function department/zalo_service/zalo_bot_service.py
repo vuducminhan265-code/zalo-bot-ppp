@@ -280,7 +280,7 @@ def extract_attachment_info(msg_obj: dict) -> tuple:
     scan_dict(msg_obj)
 
     # 2. Quét các trường lồng nhau
-    for subkey in ["document", "file", "attachment", "photo", "media", "payload", "data"]:
+    for subkey in ["document", "file", "attachment", "attachments", "photo", "image", "images", "media", "payload", "data"]:
         val = msg_obj.get(subkey)
         if isinstance(val, dict):
             scan_dict(val)
@@ -343,13 +343,26 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
             send_zalo_message(chat_id, f"⚠️ Hệ thống đã ghi nhận tệp '{display_fn}' nhưng không thể tải xuống từ Zalo Platform. Vui lòng gửi lại dưới dạng Tệp tin/Tài liệu (Document).", bot_key=bot_key)
             return
 
+    # Kiểm tra sự kiện tệp không được Zalo Platform hỗ trợ truyền trực tiếp (PDF/Word/Docx)
+    if msg_obj.get("event_name") == "message.unsupported.received":
+        log_event(f"⚠️ [{bot_key.upper()}] Zalo Platform gửi 'message.unsupported.received' từ {sender_name}")
+        unsupported_msg = (
+            f"⚠️ **Thông báo tiếp nhận tệp từ Chuyên viên {sender_name}:**\n\n"
+            "Nền tảng **Zalo Bot Platform hiện tại chỉ hỗ trợ truyền tải Hình ảnh scan/Ảnh chụp (JPG/PNG)** và chặn các tệp tài liệu PDF/Word truyền trực tiếp qua khung chat cá nhân.\n\n"
+            "👉 **Để AI thẩm định và tự động tích 'Đã hoàn thành' trên Bảng giao việc Google Sheets:**\n"
+            "1. **Gửi ảnh chụp hoặc scan (JPG/PNG)** trang văn bản (có Tiêu ngữ, Số ký hiệu, Trích yếu và Nơi nhận/Ký lưu) trực tiếp vào đây.\n"
+            "2. Hoặc nộp file vào Thư mục Bảng giao việc / Google Drive kèm cú pháp: `Nộp task [ID]` (ví dụ: `Nộp task 4`) để hệ thống đối soát ngay."
+        )
+        send_zalo_message(chat_id, unsupported_msg, bot_key=bot_key)
+        return
+
     if not raw_text and not file_attachment_path:
         keys_str = ", ".join(list(msg_obj.keys())[:8])
         log_event(f"⚠️ [{bot_key.upper()} KHÔNG RÕ NỘI DUNG]: keys=[{keys_str}] | msg={msg_obj}")
         send_zalo_message(chat_id, f"👋 Chào {sender_name}! Bot 1 đã nhận được tín hiệu nhưng chưa nhận diện được nội dung hoặc tệp tin hợp lệ. (Các trường: {keys_str})", bot_key=bot_key)
         return
 
-    # 1. Thẩm định tệp đính kèm
+    # 1. Thẩm định tệp đính kèm (Ảnh Scan / PDF hợp lệ)
     if file_attachment_path and os.path.exists(file_attachment_path):
         log_event(f"🔍 [{bot_key.upper()} OCR THẨM ĐỊNH] Đang gọi bot_agent để review file: '{attached_filename}'")
         try:
@@ -401,9 +414,9 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
             help_msg = (
                 f"👋 Chào {sender_name}! Tôi là **{bot_cfg['name']}**.\n\n"
                 "📌 **Chức năng chính của Bot 1 (Task Master):**\n"
-                "• **Nhắc việc**: Gõ `/nhacviec` hoặc `báo cáo tiến độ` để xem task quá hạn & hạn hôm nay.\n"
-                "• **Nộp file tự động**: Gửi file báo cáo (PDF/Word/Excel) để OCR & đối soát Bảng giao việc Google Sheets.\n"
-                "• **Tra cứu Task**: Hỏi bất kỳ thông tin tiến độ chuyên viên phòng PPP&QLN."
+                "• **Nhắc việc**: Gõ `nv` hoặc `tiến độ` để xem task quá hạn & hạn hôm nay.\n"
+                "• **Tra cứu Task**: Gõ `task [số]` (ví dụ: `task 4`) để xem thông tin chi tiết trên Bảng giao việc.\n"
+                "• **Đối soát nộp bài**: Gửi ảnh scan văn bản (JPG/PNG) để AI đối soát và tự động tích 'Đã hoàn thành'."
             )
         else:
             help_msg = (
@@ -411,19 +424,53 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
                 "📌 **Chức năng chính của Bot 2 (Giáo sư PPP):**\n"
                 "• **Tra cứu Pháp lý PPP (RAG Engine)**: Hỏi chi tiết Luật PPP 2020, NĐ 243/2025, NĐ 257/2025, NQ 98/2023, NQ 260/2025, Đất đai, Đầu tư công...\n"
                 "• **Web Search Grounding**: Tra cứu tin tức, sự kiện, quy định pháp luật mới nhất theo thời gian thực trên Google Search.\n"
-                "• **Thẩm định Pháp lý**: Gửi file văn bản quy phạm pháp luật để phân tích & trích dẫn Điều/Khoản."
+                "• **Thẩm định Pháp lý**: Phân tích & trích dẫn Điều/Khoản chính xác."
             )
         send_zalo_message(chat_id, help_msg, bot_key=bot_key)
         return
 
-    # 4. Tra cứu AI Agent độc bản (Single-Dispatch Engine: RAG + Web Grounding + Memory)
+    # 4. PHÂN LUỒNG XỬ LÝ RIÊNG BIỆT - TUYỆT ĐỐI KHÔNG TRỘN LẪN CÔNG VIỆC BOT 1 VÀ BOT 2
+    if bot_key == "bot1":
+        # Tra cứu Task cụ thể theo ID hoặc tên chuyên viên trên Bảng giao việc Google Sheets
+        task_id_match = re.search(r'\b(?:task|nhiệm vụ|stt|số)?\s*#?([0-9]{1,3})\b', clean_text)
+        if task_id_match:
+            t_id = task_id_match.group(1)
+            try:
+                live_tasks = task_fetcher.fetch_live_tasks()
+                matched = [t for t in live_tasks if str(t.get("task_id", "")).strip() == t_id]
+                if matched:
+                    task_info = matched[0]
+                    reply_task = (
+                        f"📌 **Thông tin Bảng giao việc - Task #{t_id}:**\n"
+                        f"• **Nhiệm vụ**: {task_info.get('task_name')}\n"
+                        f"• **Chuyên viên phụ trách**: {task_info.get('assigned_to')}\n"
+                        f"• **Hạn hoàn thành**: {task_info.get('deadline')}\n"
+                        f"• **Trạng thái**: {task_info.get('status')}\n"
+                        f"• **Sản phẩm**: {task_info.get('deliverable', 'Văn bản')}"
+                    )
+                    send_zalo_message(chat_id, reply_task, bot_key=bot_key)
+                    return
+            except Exception as e:
+                log_event(f"Lỗi tra cứu task #{t_id}: {e}")
+
+        # Với mọi tin nhắn khác không thuộc Bảng giao việc, Bot 1 KHÔNG gọi RAG Pháp lý mà hướng dẫn sang Bot 2
+        redirect_msg = (
+            f"👋 Chào {sender_name}! Tôi là **Bot 1 (Task Master)** - chuyên trách **Quản lý Tiến độ & Bảng giao việc** Phòng Hợp tác Công tư và Quản lý Nợ.\n\n"
+            "📌 **Để xem tiến độ**: Gõ `nv` hoặc `tiến độ`.\n"
+            "📌 **Để tra cứu nhiệm vụ**: Gõ `task [số]` (ví dụ: `task 4`).\n"
+            "📌 **Để đối soát hoàn thành**: Gửi ảnh scan văn bản (JPG/PNG) có tiêu ngữ & nơi nhận.\n\n"
+            "⚖️ **Tra cứu Pháp luật**: Để tra cứu **Văn bản quy phạm pháp luật, Nghị định, Luật PPP** hoặc tài liệu chuyên ngành, Anh/Chị vui lòng nhắn tin với **Bot Giáo sư PPP (Bot 2)** nhé!"
+        )
+        send_zalo_message(chat_id, redirect_msg, bot_key=bot_key)
+        return
+
+    # Bot 2: Tra cứu AI Agent độc bản (Single-Dispatch Engine: RAG + Web Grounding + Memory)
     ai_query = raw_text.replace("@Bot", "").replace("@bot", "").strip()
     if ai_query:
-        print(f"--> [{bot_key.upper()}] Xử lý qua Master AI Agent (Single Dispatch): '{ai_query}'", flush=True)
+        print(f"--> [BOT2] Xử lý qua Master AI Agent (Single Dispatch): '{ai_query}'", flush=True)
         ai_ans = call_gemini(str(chat_id), ai_query, sender_name=sender_name)
         send_zalo_message(chat_id, ai_ans, bot_key=bot_key)
 
-        # Gửi thông tin không đồng bộ tới n8n webhook (nếu chạy) để lưu trữ log mà không phát lặp tin nhắn
         def safe_n8n_post():
             try:
                 n8n_port = os.getenv("N8N_PORT") or "5678"
@@ -507,6 +554,8 @@ def poll_bot(bot_key: str):
                         msg = item
                     
                     if msg:
+                        if isinstance(msg, dict) and "event_name" not in msg and item.get("event_name"):
+                            msg["event_name"] = item.get("event_name")
                         threading.Thread(target=process_message, args=(msg, bot_key), daemon=True).start()
                         
         except requests.exceptions.Timeout:
