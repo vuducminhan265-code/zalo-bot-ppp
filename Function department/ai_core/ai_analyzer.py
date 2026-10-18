@@ -342,15 +342,18 @@ YÊU CẦU THẨM ĐỊNH CHI TIẾT (BẮT BUỘC):
    - "keyword_match": true nếu khớp các từ khóa cốt lõi của dự án; false nếu nội dung nói về dự án khác hoặc từ khóa quá thấp.
    - "matched_keywords": Danh sách các từ khóa dự án khớp được.
 
-4. ĐIỀU KIỆN TIÊN QUYẾT: DÒ NƠI NHẬN & CHỮ VIẾT TẮT CHUYÊN VIÊN:
+4. ĐỐI SOÁT NƠI NHẬN & CHỮ VIẾT TẮT CHUYÊN VIÊN (LINH HOẠT TUYỆT ĐỐI):
    - Tìm dòng cuối văn bản tại mục "Nơi nhận": "- Lưu: VT, PPP&QLN (..., ...b)."
-   - "recipient_initials": Trích chữ viết tắt trong ngoặc đơn (Ví dụ: "NtbLoc", "Nthoa", "pchan", "Hthgiang", "Vdman"...).
-   - "initials_match": true nếu chữ viết tắt này đúng là của chuyên viên được giao nhiệm vụ của Task ID đó; false nếu là của chuyên viên khác hoặc không tìm thấy.
+   - "recipient_initials": Trích chữ viết tắt trong ngoặc đơn (Ví dụ: "NtbLoc", "ntbloc", "Nthoa", "pchan", "Hthgiang", "Vdman"...).
+   - "initials_match": 
+     + TUYỆT ĐỐI KHÔNG BẮT LỖI CHỮ HOA/THƯỜNG: Chấp nhận mọi biến thể hoa/thường (Ví dụ: NtbLoc, ntbloc, NTBLOC, tbloc, ...Loc đều là của Nguyễn Trung Bảo Lộc). Nếu chữ viết tắt có chứa tên của chuyên viên phụ trách của Task đó -> true.
+     + NẾU KHÔNG CÓ DÒNG NƠI NHẬN (do người nộp chỉ chụp trang đầu có Tiêu ngữ/Số/Ngày/Trích yếu): VẪN ĐỂ "initials_match": true và KHÔNG ĐƯỢC coi là lỗi, vì văn bản đã có Số và Ngày ban hành chính thức!
+     + Chỉ để false nếu chữ viết tắt rõ ràng của một chuyên viên KHÁC trong phòng.
 
 5. KẾT LUẬN NGHIỆM THU:
-   - "status_decision": "completed" nếu KHỚP ĐỦ: (1) Trích yếu/từ khóa khớp đúng Task; (2) Có Số ký hiệu; (3) Có Ngày ban hành; (4) Chữ viết tắt nơi nhận khớp đúng chuyên viên phụ trách của Task đó.
-   - Nếu vi phạm bất kỳ tiêu chí nào -> "needs_revision".
-   - "validation_errors": Danh sách các lỗi phát hiện.
+   - "status_decision": "completed" nếu: (1) Trích yếu/từ khóa khớp đúng Task; (2) Có Số ký hiệu chính thức; (3) Có Ngày ban hành chính thức; (4) Chữ viết tắt nơi nhận không bị xung đột với người khác.
+   - Chỉ trả về "needs_revision" nếu vi phạm: Sai nội dung dự án, hoặc văn bản chưa có Số ký hiệu chính thức, hoặc chưa có Ngày ban hành.
+   - "validation_errors": Danh sách lỗi (để mảng rỗng [] nếu văn bản đạt chuẩn hoặc là bản chính thức đã có Số và Ngày).
 
 TRẢ VỀ ĐỊNH DẠNG JSON DUY NHẤT:
 {{
@@ -422,23 +425,29 @@ TRẢ VỀ ĐỊNH DẠNG JSON DUY NHẤT:
                 if recip_init:
                     verified_match = self.check_initials_match_assignee(recip_init, assigned_staff_in_task)
                     data["initials_match"] = verified_match
-                
-                # Tổng hợp danh sách lỗi
-                val_errors = data.get("validation_errors", [])
-                if not data.get("keyword_match"):
-                    val_errors.append("❌ LỖI TRÍCH YẾU: Nội dung trích yếu không khớp hoặc từ khóa quá thấp so với nhiệm vụ được giao.")
-                if not data.get("document_number"):
-                    val_errors.append("❌ LỖI THỂ THỨC: Văn bản chưa có Số ký hiệu chính thức (còn để trống).")
-                if not data.get("document_date"):
-                    val_errors.append("❌ LỖI THỂ THỨC: Văn bản chưa có Ngày tháng năm ban hành chính thức.")
-                if recip_init and not data.get("initials_match"):
-                    val_errors.append(f"❌ LỖI NGƯỜI PHỤ TRÁCH: Chữ viết tắt tại Nơi nhận là '{recip_init}', không khớp với chuyên viên được giao nhiệm vụ ('{assigned_staff_in_task}').")
+                else:
+                    # Nếu ảnh không chứa dòng nơi nhận (chỉ chụp trang đầu) nhưng đã có đủ Số và Ngày chính thức
+                    if data.get("document_number") and data.get("document_date"):
+                        data["initials_match"] = True
 
-                data["validation_errors"] = list(dict.fromkeys(val_errors))
+                # Tổng hợp danh sách lỗi một cách chuẩn xác, bỏ các lỗi hiểu nhầm của LLM
+                clean_errors = []
+                if not data.get("keyword_match"):
+                    clean_errors.append("❌ LỖI TRÍCH YẾU: Nội dung trích yếu không khớp hoặc từ khóa quá thấp so với nhiệm vụ được giao.")
+                if not data.get("document_number"):
+                    clean_errors.append("❌ LỖI THỂ THỨC: Văn bản chưa có Số ký hiệu chính thức (còn để trống).")
+                if not data.get("document_date"):
+                    clean_errors.append("❌ LỖI THỂ THỨC: Văn bản chưa có Ngày tháng năm ban hành chính thức.")
+                if recip_init and not data.get("initials_match"):
+                    clean_errors.append(f"❌ LỖI NGƯỜI PHỤ TRÁCH: Chữ viết tắt tại Nơi nhận là '{recip_init}', không khớp với chuyên viên được giao nhiệm vụ ('{assigned_staff_in_task}').")
+
+                data["validation_errors"] = clean_errors
                 
                 # Quyết định trạng thái cuối cùng
-                if len(data["validation_errors"]) == 0 and data.get("keyword_match") and data.get("initials_match", True):
+                if len(clean_errors) == 0 and data.get("keyword_match") and data.get("document_number") and data.get("document_date") and data.get("initials_match", True):
                     data["status_decision"] = "completed"
+                    if not recip_init:
+                        data["recipient_initials"] = f"Khớp theo Số/Ngày chính thức ({assigned_staff_in_task})"
                 else:
                     data["status_decision"] = "needs_revision"
                     if not data.get("resolution_options"):
