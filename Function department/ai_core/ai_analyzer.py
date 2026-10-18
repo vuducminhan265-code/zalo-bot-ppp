@@ -39,10 +39,16 @@ class TaskAIAnalyzer:
     def extract_task_number_from_filename(self, filename: str) -> str:
         """Trích xuất số Task ID đứng đầu tên file (Ví dụ: '1. 7937_UBND_PKT.pdf' -> '1', '1 - Tran Hung Dao.pdf' -> '1')"""
         base_name = os.path.basename(filename)
-        # Bắt buộc số thứ tự ID ở đầu file (thường từ 1 đến 99) theo chuẩn Bảng giao việc
-        m = re.match(r"^(?:\[?(\d{1,2})\]?|[nN][vV](\d{1,2})|[tT]ask[_\-\s]*(\d{1,2}))[.\s\-_]", base_name)
+        # Loại bỏ tiền tố hệ thống nếu có
+        clean_name = re.sub(r"^(?:zalo|bot|upload|temp|file)_[a-zA-Z0-9_\-]*?_\d+__?", "", base_name)
+        m = re.match(r"^(?:\[?(\d{1,2})\]?|[nN][vV](\d{1,2})|[tT]ask[_\-\s]*(\d{1,2}))[.\s\-_]", clean_name)
         if m:
             for g in m.groups():
+                if g:
+                    return g
+        m2 = re.match(r"^(?:\[?(\d{1,2})\]?|[nN][vV](\d{1,2})|[tT]ask[_\-\s]*(\d{1,2}))[.\s\-_]", base_name)
+        if m2:
+            for g in m2.groups():
                 if g:
                     return g
         return ""

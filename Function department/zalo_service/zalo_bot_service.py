@@ -107,25 +107,26 @@ def sanitize_zalo_text(raw_txt: str) -> str:
     t = re.sub(r'\n{3,}', '\n\n', t)
     return t.strip()
 
-def smart_split_zalo_message(text: str, max_len: int = 1800) -> list:
-    """Chia nhỏ tin nhắn Zalo thông minh theo dòng/câu/từ, tuyệt đối không cắt giữa chừng một từ hay khoản luật."""
+def smart_split_zalo_message(text: str, max_len: int = 1400) -> list:
+    """Chia nhỏ tin nhắn Zalo thông minh theo đoạn/dòng, tuyệt đối không cắt giữa chừng dòng hay từ ngữ."""
     if not text:
         return []
     if len(text) <= max_len:
         return [text]
 
     chunks = []
-    remaining = text
+    remaining = text.strip()
     while len(remaining) > max_len:
-        # Tìm vị trí ngắt câu phù hợp gần max_len
+        # 1. Cắt tại ngắt đoạn lớn (\n\n)
         cut_point = remaining.rfind("\n\n", 0, max_len)
-        if cut_point == -1 or cut_point < max_len * 0.4:
+        # 2. Cắt tại đầu dòng của một task mới (\n• ) để không xé nhỏ task
+        if cut_point == -1 or cut_point < max_len * 0.35:
+            cut_point = remaining.rfind("\n• ", 0, max_len)
+        # 3. Cắt tại bất kỳ dấu xuống dòng nào (\n)
+        if cut_point == -1 or cut_point < max_len * 0.35:
             cut_point = remaining.rfind("\n", 0, max_len)
-        if cut_point == -1 or cut_point < max_len * 0.4:
-            cut_point = remaining.rfind(". ", 0, max_len)
-            if cut_point != -1:
-                cut_point += 1
-        if cut_point == -1 or cut_point < max_len * 0.4:
+        # 4. Cắt tại dấu cách từ cuối cùng trước max_len
+        if cut_point == -1 or cut_point < max_len * 0.35:
             cut_point = remaining.rfind(" ", 0, max_len)
 
         if cut_point == -1 or cut_point <= 0:
@@ -147,7 +148,7 @@ def send_zalo_message(chat_id: str, text: str, bot_key: str = "bot1"):
     clean_text = sanitize_zalo_text(text)
     try:
         url = f"{base_url}/sendMessage"
-        chunks = smart_split_zalo_message(clean_text, max_len=1800)
+        chunks = smart_split_zalo_message(clean_text, max_len=1400)
         for chunk in chunks:
             payload = {
                 "chat_id": str(chat_id),
@@ -161,11 +162,15 @@ def send_zalo_message(chat_id: str, text: str, bot_key: str = "bot1"):
         print(f"Error sending message on {bot_key}: {e}", flush=True)
 
 def download_zalo_file(file_id: str = None, file_name: str = None, direct_url: str = None, bot_key: str = "bot1") -> str:
-    """Tải tệp đính kèm gửi qua Zalo Bot (PDF, DOCX, XLSX, hình ảnh) về thư mục tạm."""
+    """Tải tệp đính kèm gửi qua Zalo Bot về thư mục tạm với TÊN GỐC CHUẨN XÁC để nhận diện Task ID."""
     import tempfile
     bot_cfg = BOTS.get(bot_key, BOTS["bot1"])
-    clean_name = re.sub(r'[^\w\-_\.]', '_', file_name or "document.pdf")
-    local_path = os.path.join(tempfile.gettempdir(), f"zalo_{bot_key}_{int(time.time())}_{clean_name}")
+    orig_name = (file_name or "van_ban.pdf").strip()
+    safe_name = os.path.basename(orig_name)
+    
+    unique_dir = os.path.join(tempfile.gettempdir(), f"zalo_file_{bot_key}_{int(time.time() * 1000)}")
+    os.makedirs(unique_dir, exist_ok=True)
+    local_path = os.path.join(unique_dir, safe_name)
     try:
         if direct_url:
             r = requests.get(direct_url, timeout=30)
@@ -177,9 +182,13 @@ def download_zalo_file(file_id: str = None, file_name: str = None, direct_url: s
         if file_id:
             info_resp = requests.get(f"{bot_cfg['base_url']}/getFile?file_id={file_id}", timeout=15)
             data = info_resp.json()
+            if not data.get("ok"):
+                # Thử fallback param file_token
+                info_resp = requests.get(f"{bot_cfg['base_url']}/getFile?file_token={file_id}", timeout=15)
+                data = info_resp.json()
             if data.get("ok"):
                 f_info = data.get("result", {})
-                dl_url = f_info.get("download_url") or f_info.get("file_path")
+                dl_url = f_info.get("download_url") or f_info.get("file_path") or f_info.get("url")
                 if dl_url:
                     if not dl_url.startswith("http"):
                         dl_url = f"https://bot-api.zaloplatforms.com/file/bot{bot_cfg['token']}/{dl_url}"
@@ -192,6 +201,71 @@ def download_zalo_file(file_id: str = None, file_name: str = None, direct_url: s
         print(f"⚠️ [{bot_key.upper()} Lỗi tải file Zalo]: {e}", flush=True)
     return None
 
+def extract_attachment_info(msg_obj: dict) -> tuple:
+    """Bóc tách triệt để mọi dạng tệp đính kèm (document, file, attachment, photo...) từ Zalo Bot API."""
+    f_id = None
+    f_name = None
+    f_url = None
+
+    # 1. msg_obj.get("document")
+    doc = msg_obj.get("document")
+    if doc and isinstance(doc, dict):
+        f_id = doc.get("file_id") or doc.get("id")
+        f_name = doc.get("file_name") or doc.get("name")
+        f_url = doc.get("url") or doc.get("download_url")
+
+    # 2. msg_obj.get("file")
+    if not f_id and not f_url:
+        f = msg_obj.get("file")
+        if f and isinstance(f, dict):
+            f_id = f.get("file_id") or f.get("id")
+            f_name = f.get("file_name") or f.get("name")
+            f_url = f.get("url") or f.get("download_url")
+
+    # 3. msg_obj.get("attachment") (số ít)
+    if not f_id and not f_url:
+        att = msg_obj.get("attachment")
+        if att and isinstance(att, dict):
+            payload = att.get("payload", {}) if isinstance(att.get("payload"), dict) else {}
+            f_id = payload.get("file_id") or payload.get("token") or payload.get("id") or att.get("file_id") or att.get("id")
+            f_name = payload.get("name") or payload.get("file_name") or payload.get("title") or att.get("name") or att.get("file_name")
+            f_url = payload.get("url") or payload.get("download_url") or att.get("url")
+
+    # 4. msg_obj.get("attachments") (số nhiều)
+    if not f_id and not f_url:
+        atts = msg_obj.get("attachments")
+        if atts and isinstance(atts, list) and len(atts) > 0:
+            att = atts[0]
+            if isinstance(att, dict):
+                payload = att.get("payload", {}) if isinstance(att.get("payload"), dict) else {}
+                f_id = payload.get("file_id") or payload.get("token") or payload.get("id") or att.get("file_id") or att.get("id")
+                f_name = payload.get("name") or payload.get("file_name") or payload.get("title") or att.get("name") or att.get("file_name")
+                f_url = payload.get("url") or payload.get("download_url") or att.get("url")
+
+    # 5. msg_obj.get("photo")
+    if not f_id and not f_url:
+        photos = msg_obj.get("photo")
+        if photos and isinstance(photos, list) and len(photos) > 0:
+            p = photos[-1]
+            if isinstance(p, dict):
+                f_id = p.get("file_id") or p.get("id")
+                f_name = p.get("file_name") or "van_ban_scan.jpg"
+                f_url = p.get("url") or p.get("download_url")
+        elif photos and isinstance(photos, dict):
+            f_id = photos.get("file_id") or photos.get("id")
+            f_name = photos.get("file_name") or "van_ban_scan.jpg"
+            f_url = photos.get("url") or photos.get("download_url")
+
+    # 6. Kiểm tra trực tiếp trên root msg_obj
+    if not f_id and not f_url:
+        if msg_obj.get("file_id"): f_id = msg_obj.get("file_id")
+        if msg_obj.get("download_url"): f_url = msg_obj.get("download_url")
+        elif msg_obj.get("url") and any(ext in str(msg_obj.get("url")).lower() for ext in [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".jpg", ".png"]):
+            f_url = msg_obj.get("url")
+        if msg_obj.get("file_name"): f_name = msg_obj.get("file_name")
+
+    return f_id, f_name, f_url
+
 def process_message(msg_obj: dict, bot_key: str = "bot1"):
     """Xử lý sự kiện tin nhắn từ người dùng cho Bot tương ứng (bot1 hoặc bot2)."""
     chat = msg_obj.get("chat", {})
@@ -202,40 +276,24 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
     raw_text = (msg_obj.get("text") or msg_obj.get("caption") or msg_obj.get("data") or msg_obj.get("content") or "").strip()
     bot_cfg = BOTS.get(bot_key, BOTS["bot1"])
 
-    # 0. Bóc tách tệp đính kèm (Document / File / Photo)
-    doc_obj = msg_obj.get("document") or msg_obj.get("file")
-    photo_obj = msg_obj.get("photo")
-    attachments = msg_obj.get("attachments") or []
+    # 0. Bóc tách tệp đính kèm (Document / File / Photo / Attachment)
+    f_id, attached_filename, f_url = extract_attachment_info(msg_obj)
     
     file_attachment_path = None
-    attached_filename = None
-    
-    if doc_obj and isinstance(doc_obj, dict):
-        f_id = doc_obj.get("file_id")
-        attached_filename = doc_obj.get("file_name") or doc_obj.get("name") or "van_ban.pdf"
-        f_url = doc_obj.get("url") or doc_obj.get("download_url")
-        file_attachment_path = download_zalo_file(f_id, attached_filename, f_url, bot_key=bot_key)
-    elif attachments and isinstance(attachments, list) and len(attachments) > 0:
-        att = attachments[0]
-        payload = att.get("payload", {}) if isinstance(att, dict) else {}
-        f_id = payload.get("file_id") or att.get("file_id")
-        attached_filename = payload.get("name") or payload.get("file_name") or "van_ban.pdf"
-        f_url = payload.get("url") or att.get("url")
-        file_attachment_path = download_zalo_file(f_id, attached_filename, f_url, bot_key=bot_key)
-    elif photo_obj and isinstance(photo_obj, list) and len(photo_obj) > 0:
-        p = photo_obj[-1]
-        f_id = p.get("file_id")
-        attached_filename = "van_ban_scan.jpg"
-        f_url = p.get("url")
+    if f_id or f_url:
         file_attachment_path = download_zalo_file(f_id, attached_filename, f_url, bot_key=bot_key)
         
-    if not chat_id or (not raw_text and not file_attachment_path):
+    if not chat_id:
+        return
+
+    if not raw_text and not file_attachment_path:
+        print(f"⚠️ [{bot_key.upper()} KHÔNG RÕ NỘI DUNG]: {msg_obj}", flush=True)
         return
 
     # 1. Thẩm định tệp đính kèm
     if file_attachment_path and os.path.exists(file_attachment_path):
         print(f"\n📎 [{bot_key.upper()} TỆP ĐÍNH KÈM] Từ: {sender_name} | ChatID: {chat_id} | Tên file: '{attached_filename}'", flush=True)
-        send_zalo_message(chat_id, f"📥 **Đã tiếp nhận tệp:** `{attached_filename}` từ chuyên viên **{sender_name}**.\n🤖 *AI Agent ({bot_cfg['name']}) đang tiến hành OCR & thẩm định...*", bot_key=bot_key)
+        send_zalo_message(chat_id, f"📥 Đã tiếp nhận tệp: {attached_filename} từ chuyên viên {sender_name}.\n🤖 AI Agent ({bot_cfg['name']}) đang tiến hành OCR & thẩm định...", bot_key=bot_key)
         try:
             review_reply = bot_agent.process_message(
                 user_text=raw_text or f"Nộp file {attached_filename}",
