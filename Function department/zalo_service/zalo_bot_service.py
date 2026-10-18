@@ -584,7 +584,7 @@ def run_http_health_server():
             info = {
                 "status": "online",
                 "service": "Zalo Bot PPP Task Master (Bot 1)",
-                "version": "2.7.0-file-audit-observability",
+                "version": "2.8.0-strict-isolation",
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "log_count": len(RECENT_LOGS)
             }
