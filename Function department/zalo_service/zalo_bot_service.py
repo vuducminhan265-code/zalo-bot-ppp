@@ -23,6 +23,15 @@ else:
 
 load_dotenv()
 
+from collections import deque
+RECENT_LOGS = deque(maxlen=250)
+
+def log_event(msg: str):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    entry = f"[{timestamp}] {msg}"
+    print(entry, flush=True)
+    RECENT_LOGS.append(entry)
+
 # Tokens for Dual Zalo Bot Setup
 BOT1_TOKEN = os.getenv("ZALO_BOT_TOKEN_1") or os.getenv("ZALO_BOT_TOKEN") or "1175912593990733827:IQHQDAkiFOfwODzTmEKdPvfCSbDJubszVeLXcvxwqTSZXPbNaBaTLYQAmeXpAWMX"
 BOT2_TOKEN = os.getenv("ZALO_BOT_TOKEN_2") or "916808225583576762:qyESEAzJfULNqmolAsxDwfskYoEhQXPDNPytmKbTOeFquMpnOkmLQOURsBEgJDln"
@@ -171,34 +180,70 @@ def download_zalo_file(file_id: str = None, file_name: str = None, direct_url: s
     unique_dir = os.path.join(tempfile.gettempdir(), f"zalo_file_{bot_key}_{int(time.time() * 1000)}")
     os.makedirs(unique_dir, exist_ok=True)
     local_path = os.path.join(unique_dir, safe_name)
+    log_event(f"[{bot_key.upper()}] Bắt đầu tải file: '{orig_name}' (id={file_id}, direct_url={bool(direct_url)})")
+
     try:
         if direct_url:
+            log_event(f"[{bot_key.upper()}] Tải trực tiếp qua direct_url: {direct_url[:120]}...")
             r = requests.get(direct_url, timeout=30)
             if r.status_code == 200 and len(r.content) > 0:
                 with open(local_path, "wb") as f:
                     f.write(r.content)
+                log_event(f"[{bot_key.upper()}] Tải file thành công ({len(r.content)} bytes) -> {local_path}")
                 return local_path
+            else:
+                log_event(f"[{bot_key.upper()}] Direct URL returned status {r.status_code}")
                 
         if file_id:
-            info_resp = requests.get(f"{bot_cfg['base_url']}/getFile?file_id={file_id}", timeout=15)
-            data = info_resp.json()
-            if not data.get("ok"):
-                # Thử fallback param file_token
-                info_resp = requests.get(f"{bot_cfg['base_url']}/getFile?file_token={file_id}", timeout=15)
-                data = info_resp.json()
-            if data.get("ok"):
-                f_info = data.get("result", {})
-                dl_url = f_info.get("download_url") or f_info.get("file_path") or f_info.get("url")
-                if dl_url:
-                    if not dl_url.startswith("http"):
-                        dl_url = f"https://bot-api.zaloplatforms.com/file/bot{bot_cfg['token']}/{dl_url}"
-                    r = requests.get(dl_url, timeout=30)
-                    if r.status_code == 200 and len(r.content) > 0:
-                        with open(local_path, "wb") as f:
-                            f.write(r.content)
-                        return local_path
+            dl_url = None
+            # 1. Thử GET /getFile?file_id=...
+            try:
+                r1 = requests.get(f"{bot_cfg['base_url']}/getFile?file_id={file_id}", timeout=15)
+                d1 = r1.json()
+                if d1.get("ok"):
+                    res = d1.get("result", {})
+                    dl_url = res.get("download_url") or res.get("file_path") or res.get("url")
+            except Exception as e1:
+                log_event(f"[{bot_key.upper()}] GET getFile error: {e1}")
+
+            # 2. Thử POST /getFile {"file_id": ...}
+            if not dl_url:
+                try:
+                    r2 = requests.post(f"{bot_cfg['base_url']}/getFile", json={"file_id": file_id}, timeout=15)
+                    d2 = r2.json()
+                    if d2.get("ok"):
+                        res = d2.get("result", {})
+                        dl_url = res.get("download_url") or res.get("file_path") or res.get("url")
+                except Exception as e2:
+                    log_event(f"[{bot_key.upper()}] POST getFile error: {e2}")
+
+            # 3. Thử fallback GET /getFile?file_token=...
+            if not dl_url:
+                try:
+                    r3 = requests.get(f"{bot_cfg['base_url']}/getFile?file_token={file_id}", timeout=15)
+                    d3 = r3.json()
+                    if d3.get("ok"):
+                        res = d3.get("result", {})
+                        dl_url = res.get("download_url") or res.get("file_path") or res.get("url")
+                except Exception as e3:
+                    log_event(f"[{bot_key.upper()}] GET file_token error: {e3}")
+
+            if dl_url:
+                if not dl_url.startswith("http"):
+                    dl_url = f"https://bot-api.zaloplatforms.com/file/bot{bot_cfg['token']}/{dl_url}"
+                log_event(f"[{bot_key.upper()}] Tải file từ resolved URL: {dl_url[:120]}...")
+                r = requests.get(dl_url, timeout=30)
+                if r.status_code == 200 and len(r.content) > 0:
+                    with open(local_path, "wb") as f:
+                        f.write(r.content)
+                    log_event(f"[{bot_key.upper()}] Tải file thành công ({len(r.content)} bytes) -> {local_path}")
+                    return local_path
+                else:
+                    log_event(f"[{bot_key.upper()}] Download URL returned status {r.status_code}")
+            else:
+                log_event(f"[{bot_key.upper()}] Không thể resolve dl_url cho file_id {file_id}")
     except Exception as e:
-        print(f"⚠️ [{bot_key.upper()} Lỗi tải file Zalo]: {e}", flush=True)
+        log_event(f"⚠️ [{bot_key.upper()} Lỗi tải file Zalo]: {e}")
     return None
 
 def extract_attachment_info(msg_obj: dict) -> tuple:
@@ -207,93 +252,106 @@ def extract_attachment_info(msg_obj: dict) -> tuple:
     f_name = None
     f_url = None
 
-    # 1. msg_obj.get("document")
-    doc = msg_obj.get("document")
-    if doc and isinstance(doc, dict):
-        f_id = doc.get("file_id") or doc.get("id")
-        f_name = doc.get("file_name") or doc.get("name")
-        f_url = doc.get("url") or doc.get("download_url")
+    def scan_dict(d: dict):
+        nonlocal f_id, f_name, f_url
+        if not isinstance(d, dict): return
+        
+        # Check id / token
+        for k in ["file_id", "token", "fileToken", "id"]:
+            if d.get(k) and isinstance(d[k], (str, int)) and not str(d[k]).startswith("http"):
+                if not f_id: f_id = str(d[k])
+                break
+                
+        # Check filename
+        for k in ["file_name", "fileName", "name", "title"]:
+            val = str(d.get(k) or "").strip()
+            if val and any(val.lower().endswith(ext) for ext in [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".zip", ".rar", ".png", ".jpg", ".jpeg"]):
+                if not f_name: f_name = val
+                break
+                
+        # Check url / download_url
+        for k in ["url", "download_url", "downloadUrl", "file_url", "fileUrl", "href"]:
+            val = str(d.get(k) or "").strip()
+            if val and val.startswith("http"):
+                if not f_url: f_url = val
+                break
 
-    # 2. msg_obj.get("file")
-    if not f_id and not f_url:
-        f = msg_obj.get("file")
-        if f and isinstance(f, dict):
-            f_id = f.get("file_id") or f.get("id")
-            f_name = f.get("file_name") or f.get("name")
-            f_url = f.get("url") or f.get("download_url")
+    # 1. Quét đối tượng gốc
+    scan_dict(msg_obj)
 
-    # 3. msg_obj.get("attachment") (số ít)
-    if not f_id and not f_url:
-        att = msg_obj.get("attachment")
-        if att and isinstance(att, dict):
-            payload = att.get("payload", {}) if isinstance(att.get("payload"), dict) else {}
-            f_id = payload.get("file_id") or payload.get("token") or payload.get("id") or att.get("file_id") or att.get("id")
-            f_name = payload.get("name") or payload.get("file_name") or payload.get("title") or att.get("name") or att.get("file_name")
-            f_url = payload.get("url") or payload.get("download_url") or att.get("url")
+    # 2. Quét các trường lồng nhau
+    for subkey in ["document", "file", "attachment", "photo", "media", "payload", "data"]:
+        val = msg_obj.get(subkey)
+        if isinstance(val, dict):
+            scan_dict(val)
+            if isinstance(val.get("payload"), dict):
+                scan_dict(val["payload"])
+        elif isinstance(val, list):
+            for elem in val:
+                if isinstance(elem, dict):
+                    scan_dict(elem)
+                    if isinstance(elem.get("payload"), dict):
+                        scan_dict(elem["payload"])
 
-    # 4. msg_obj.get("attachments") (số nhiều)
-    if not f_id and not f_url:
-        atts = msg_obj.get("attachments")
-        if atts and isinstance(atts, list) and len(atts) > 0:
-            att = atts[0]
+    # 3. Quét attachments dạng mảng
+    atts = msg_obj.get("attachments")
+    if isinstance(atts, list):
+        for att in atts:
             if isinstance(att, dict):
-                payload = att.get("payload", {}) if isinstance(att.get("payload"), dict) else {}
-                f_id = payload.get("file_id") or payload.get("token") or payload.get("id") or att.get("file_id") or att.get("id")
-                f_name = payload.get("name") or payload.get("file_name") or payload.get("title") or att.get("name") or att.get("file_name")
-                f_url = payload.get("url") or payload.get("download_url") or att.get("url")
+                scan_dict(att)
+                if isinstance(att.get("payload"), dict):
+                    scan_dict(att["payload"])
 
-    # 5. msg_obj.get("photo")
-    if not f_id and not f_url:
-        photos = msg_obj.get("photo")
-        if photos and isinstance(photos, list) and len(photos) > 0:
-            p = photos[-1]
-            if isinstance(p, dict):
-                f_id = p.get("file_id") or p.get("id")
-                f_name = p.get("file_name") or "van_ban_scan.jpg"
-                f_url = p.get("url") or p.get("download_url")
-        elif photos and isinstance(photos, dict):
-            f_id = photos.get("file_id") or photos.get("id")
-            f_name = photos.get("file_name") or "van_ban_scan.jpg"
-            f_url = photos.get("url") or photos.get("download_url")
-
-    # 6. Kiểm tra trực tiếp trên root msg_obj
-    if not f_id and not f_url:
-        if msg_obj.get("file_id"): f_id = msg_obj.get("file_id")
-        if msg_obj.get("download_url"): f_url = msg_obj.get("download_url")
-        elif msg_obj.get("url") and any(ext in str(msg_obj.get("url")).lower() for ext in [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".jpg", ".png"]):
-            f_url = msg_obj.get("url")
-        if msg_obj.get("file_name"): f_name = msg_obj.get("file_name")
+    # Fallback tên tệp nếu có url hoặc id nhưng chưa có tên
+    if (f_id or f_url) and not f_name:
+        if f_url:
+            path_part = f_url.split("?")[0].rstrip("/")
+            candidate = os.path.basename(path_part)
+            if "." in candidate and len(candidate) > 3:
+                f_name = candidate
+        if not f_name:
+            f_name = f"van_ban_{f_id or 'dinh_kem'}.pdf"
 
     return f_id, f_name, f_url
 
 def process_message(msg_obj: dict, bot_key: str = "bot1"):
     """Xử lý sự kiện tin nhắn từ người dùng cho Bot tương ứng (bot1 hoặc bot2)."""
-    chat = msg_obj.get("chat", {})
-    chat_id = chat.get("id")
+    chat = msg_obj.get("chat", {}) if isinstance(msg_obj.get("chat"), dict) else {}
+    chat_id = chat.get("id") or msg_obj.get("chat_id")
     chat_type = chat.get("chat_type", "UNKNOWN")
-    from_user = msg_obj.get("from", {})
+    from_user = msg_obj.get("from", {}) if isinstance(msg_obj.get("from"), dict) else {}
     sender_name = from_user.get("display_name") or from_user.get("name") or "Chuyên viên"
     raw_text = (msg_obj.get("text") or msg_obj.get("caption") or msg_obj.get("data") or msg_obj.get("content") or "").strip()
     bot_cfg = BOTS.get(bot_key, BOTS["bot1"])
+
+    if not chat_id:
+        log_event(f"⚠️ [{bot_key.upper()}] Bỏ qua message không có chat_id: {msg_obj}")
+        return
 
     # 0. Bóc tách tệp đính kèm (Document / File / Photo / Attachment)
     f_id, attached_filename, f_url = extract_attachment_info(msg_obj)
     
     file_attachment_path = None
     if f_id or f_url:
-        file_attachment_path = download_zalo_file(f_id, attached_filename, f_url, bot_key=bot_key)
+        display_fn = attached_filename or "Tài liệu văn bản"
+        log_event(f"📎 [{bot_key.upper()} NHẬN TỆP] Từ: {sender_name} | ChatID: {chat_id} | Tên file: '{display_fn}' (id={f_id})")
+        send_zalo_message(chat_id, f"📥 Đã tiếp nhận tệp: {display_fn} từ chuyên viên {sender_name}.\n🤖 AI Agent ({bot_cfg['name']}) đang tải xuống và tiến hành OCR & thẩm định...", bot_key=bot_key)
         
-    if not chat_id:
-        return
+        file_attachment_path = download_zalo_file(f_id, attached_filename, f_url, bot_key=bot_key)
+        if not file_attachment_path:
+            log_event(f"⚠️ [{bot_key.upper()}] Thất bại khi tải tệp '{display_fn}'")
+            send_zalo_message(chat_id, f"⚠️ Hệ thống đã ghi nhận tệp '{display_fn}' nhưng không thể tải xuống từ Zalo Platform. Vui lòng gửi lại dưới dạng Tệp tin/Tài liệu (Document).", bot_key=bot_key)
+            return
 
     if not raw_text and not file_attachment_path:
-        print(f"⚠️ [{bot_key.upper()} KHÔNG RÕ NỘI DUNG]: {msg_obj}", flush=True)
+        keys_str = ", ".join(list(msg_obj.keys())[:8])
+        log_event(f"⚠️ [{bot_key.upper()} KHÔNG RÕ NỘI DUNG]: keys=[{keys_str}] | msg={msg_obj}")
+        send_zalo_message(chat_id, f"👋 Chào {sender_name}! Bot 1 đã nhận được tín hiệu nhưng chưa nhận diện được nội dung hoặc tệp tin hợp lệ. (Các trường: {keys_str})", bot_key=bot_key)
         return
 
     # 1. Thẩm định tệp đính kèm
     if file_attachment_path and os.path.exists(file_attachment_path):
-        print(f"\n📎 [{bot_key.upper()} TỆP ĐÍNH KÈM] Từ: {sender_name} | ChatID: {chat_id} | Tên file: '{attached_filename}'", flush=True)
-        send_zalo_message(chat_id, f"📥 Đã tiếp nhận tệp: {attached_filename} từ chuyên viên {sender_name}.\n🤖 AI Agent ({bot_cfg['name']}) đang tiến hành OCR & thẩm định...", bot_key=bot_key)
+        log_event(f"🔍 [{bot_key.upper()} OCR THẨM ĐỊNH] Đang gọi bot_agent để review file: '{attached_filename}'")
         try:
             review_reply = bot_agent.process_message(
                 user_text=raw_text or f"Nộp file {attached_filename}",
@@ -302,6 +360,7 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
             )
             send_zalo_message(chat_id, review_reply, bot_key=bot_key)
         except Exception as e:
+            log_event(f"❌ [{bot_key.upper()} Lỗi review file]: {e}")
             send_zalo_message(chat_id, f"⚠️ Đã xảy ra lỗi khi thẩm định tệp: {e}", bot_key=bot_key)
         finally:
             try:
@@ -428,6 +487,9 @@ def poll_bot(bot_key: str):
                     if up_id:
                         offset = max(offset, up_id + 1)
                     
+                    item_preview = json.dumps(item, ensure_ascii=False)[:300]
+                    log_event(f"[{bot_key.upper()} UPDATE RECEIVED]: {item_preview}")
+                    
                     # 1. Normal message or edited message
                     msg = item.get("message") or item.get("edited_message")
                     
@@ -439,6 +501,10 @@ def poll_bot(bot_key: str):
                             msg["text"] = cb["data"]
                         if "from" in cb:
                             msg["from"] = cb["from"]
+
+                    # 3. Fallback: item itself is the message or contains message-like fields
+                    if not msg and any(k in item for k in ["chat", "from", "document", "attachment", "attachments", "file", "text", "caption"]):
+                        msg = item
                     
                     if msg:
                         threading.Thread(target=process_message, args=(msg, bot_key), daemon=True).start()
@@ -446,7 +512,7 @@ def poll_bot(bot_key: str):
         except requests.exceptions.Timeout:
             continue
         except Exception as e:
-            print(f"❌ [{bot_key.upper()}] Polling loop exception: {e}", flush=True)
+            log_event(f"❌ [{bot_key.upper()}] Polling loop exception: {e}")
             time.sleep(5)
 def run_http_health_server():
     """Khởi chạy HTTP Server siêu nhẹ trên port 5678 cho Render Health Check 24/7 (chỉ tốn ~5MB RAM)."""
@@ -455,14 +521,23 @@ def run_http_health_server():
     
     class HealthHandler(BaseHTTPRequestHandler):
         def do_GET(self):
+            if self.path.startswith("/logs"):
+                self.send_response(200)
+                self.send_header("Content-type", "text/plain; charset=utf-8")
+                self.end_headers()
+                log_data = "\n".join(list(RECENT_LOGS))
+                self.wfile.write((log_data or "No logs recorded yet.").encode("utf-8"))
+                return
+
             self.send_response(200)
             self.send_header("Content-type", "application/json; charset=utf-8")
             self.end_headers()
             info = {
                 "status": "online",
                 "service": "Zalo Bot PPP Task Master (Bot 1)",
-                "version": "2.6.0-file-audit-ok",
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                "version": "2.7.0-file-audit-observability",
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "log_count": len(RECENT_LOGS)
             }
             self.wfile.write(json.dumps(info, ensure_ascii=False).encode("utf-8"))
         def log_message(self, format, *args):
