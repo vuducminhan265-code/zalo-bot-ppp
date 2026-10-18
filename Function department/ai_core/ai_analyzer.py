@@ -20,13 +20,19 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or DEFAULT_GEMINI_KEY
 # Bảng tra cứu chữ viết tắt chuyên viên tại Nơi nhận (Lưu: VT, PPP&QLN (...))
 STAFF_INITIALS_MAP = {
     "nguyễn thế hòa": ["nthoa", "thoa", "thhoa", "hoa", "nguyenthehoa"],
-    "nguyễn trung bảo lộc": ["ntbloc", "tbloc", "bloc", "nbloc", "loc", "nguyentrungbaoloc"],
+    "nguyễn trung bảo lộc": ["ntbloc", "nlbloc", "tbloc", "bloc", "nbloc", "ntloc", "loc", "nguyentrungbaoloc"],
     "hoàng thị hương giang": ["hthgiang", "thgiang", "hgiang", "giang", "hoangthihuonggiang"],
     "phan công hận": ["pchan", "chan", "han", "phanconghan"],
     "vũ đức minh an": ["vdman", "dman", "man", "an", "vuducminhan", "alexander"],
     "lê hoàng": ["lhoang", "lehoang", "hoang"],
     "tô thị kim thoa": ["ttkthoa", "kthoa", "tothikimthoa"]
 }
+
+def remove_vn_accents(text: str) -> str:
+    import unicodedata
+    if not text: return ""
+    norm = "".join(c for c in unicodedata.normalize('NFD', text) if unicodedata.category(c) != 'Mn')
+    return norm.replace('đ', 'd').replace('Đ', 'D')
 
 class TaskAIAnalyzer:
     def __init__(self, api_key: str = None):
@@ -115,11 +121,16 @@ class TaskAIAnalyzer:
                     img_bytes = f.read()
                 mime = "image/jpeg" if ext in [".jpg", ".jpeg"] else "image/png"
                 img_part = types.Part.from_bytes(data=img_bytes, mime_type=mime)
-                resp = self.client.models.generate_content(
-                    model="gemini-3.5-flash-lite",
-                    contents=[img_part, "Hãy đọc toàn bộ văn bản trong ảnh này, giữ nguyên đầy đủ tiêu ngữ, số ký hiệu, ngày tháng, trích yếu, nội dung và nơi nhận (Lưu: VT, PPP&QLN...)."]
-                )
-                return resp.text.strip() if resp.text else ""
+                for m_name in ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-2.5-flash"]:
+                    try:
+                        resp = self.client.models.generate_content(
+                            model=m_name,
+                            contents=[img_part, "Hãy đọc toàn bộ văn bản trong ảnh này, giữ nguyên đầy đủ tiêu ngữ, số ký hiệu, ngày tháng, trích yếu, nội dung và nơi nhận (Lưu: VT, PPP&QLN...)."]
+                        )
+                        if resp.text and resp.text.strip():
+                            return resp.text.strip()
+                    except Exception:
+                        time.sleep(0.5)
             except Exception as e:
                 sys.stderr.write(f"Image extract error: {e}\n")
         return ""
@@ -180,24 +191,32 @@ class TaskAIAnalyzer:
             return False
         init_clean = initials.lower().strip()
         ass_clean = assignee_name.lower().strip()
+        ass_no_accent = remove_vn_accents(ass_clean)
         
         # 1. So khớp theo bản đồ chữ viết tắt chính thức
         for full_name, valid_list in STAFF_INITIALS_MAP.items():
-            if full_name in ass_clean or ass_clean in full_name:
-                return init_clean in valid_list
+            if full_name in ass_clean or ass_clean in full_name or remove_vn_accents(full_name) in ass_no_accent:
+                if init_clean in valid_list:
+                    return True
+                # Khử nhiễu OCR: 't' bị đọc nhầm thành 'l' hoặc '1'
+                ocr_variants = [init_clean.replace('l', 't'), init_clean.replace('1', 't'), init_clean.replace('t', 'l')]
+                if any(v in valid_list for v in ocr_variants):
+                    return True
                 
-        # 2. So khớp tự động nếu viết tên không dấu hoặc chữ cái đầu
-        tokens = [re.sub(r'[^\w]', '', w) for w in ass_clean.split()]
-        if tokens:
-            last_name = tokens[-1]
-            first_letters = "".join([w[0] for w in tokens[:-1]])
+        # 2. So khớp tự động theo tên riêng không dấu (ví dụ: loc, hoa, giang...)
+        tokens_no_acc = [re.sub(r'[^\w]', '', w) for w in ass_no_accent.split()]
+        if tokens_no_acc:
+            last_name = tokens_no_acc[-1] # ví dụ "loc"
+            if last_name and (last_name in init_clean or init_clean.endswith(last_name)):
+                return True
+            first_letters = "".join([w[0] for w in tokens_no_acc[:-1]])
             combined = f"{first_letters}{last_name}"
             if init_clean == combined or init_clean == last_name:
                 return True
                 
         return False
 
-    def review_submission(self, file_path: str, assignee_name: str, pending_tasks: list, user_hint_text: str = "") -> dict:
+    def review_submission(self, file_path, assignee_name: str, pending_tasks: list, user_hint_text: str = "") -> dict:
         """
         Quy trình Thẩm định Sản phẩm Tự động Đa tầng (Multi-Tier Rigorous Document Review):
         1. Kiểm tra số ID nhiệm vụ ở đầu tên file hoặc tin nhắn đi kèm hoặc đối chiếu từ khóa trích yếu.
@@ -206,11 +225,23 @@ class TaskAIAnalyzer:
         4. TIÊU CHÍ TUYÊN QUYẾT: Dò chữ viết tắt chuyên viên tại Nơi nhận (Lưu: VT, PPP&QLN (...)).
         5. Phân loại ĐẠT (completed) hoặc CẢNH BÁO LỖI (needs_revision) kèm hướng dẫn khắc phục.
         """
-        filename = os.path.basename(file_path)
-        hint_task_id = self.extract_task_number_from_filename(filename)
+        file_list = file_path if isinstance(file_path, list) else [file_path]
+        filenames = [os.path.basename(p) for p in file_list]
+        filename = ", ".join(filenames)
+        hint_task_id = ""
+        for fn in filenames:
+            tid = self.extract_task_number_from_filename(fn)
+            if tid:
+                hint_task_id = tid
+                break
         
-        # 1. Trích xuất text từ văn bản / OCR ảnh
-        local_text = self._extract_text_fallback(file_path)
+        # 1. Trích xuất text từ văn bản / OCR ảnh (gộp tất cả các trang nếu nộp nhiều ảnh)
+        extracted_texts = []
+        for p in file_list:
+            t = self._extract_text_fallback(p)
+            if t:
+                extracted_texts.append(t)
+        local_text = "\n\n--- TRANG TIẾP THEO ---\n\n".join(extracted_texts) if extracted_texts else ""
         regex_meta = self._extract_regex_metadata(local_text)
 
         # 2. Nếu tên file chưa có Task ID, tìm trong tin nhắn đi kèm (user_hint_text)
@@ -219,56 +250,66 @@ class TaskAIAnalyzer:
             if m_text:
                 hint_task_id = m_text.group(1)
 
-        # 3. Nếu vẫn chưa có, tự động dò từ khóa trích yếu với Bảng giao việc Google Sheets
+        # 3. Tự động dò Task ID có điểm số khớp cao nhất (Best Match Score)
         if not hint_task_id and local_text:
+            best_task_id = None
+            best_score = 0
+            distinctive_dict = {
+                "1": ["trần hưng đạo", "phước hải", "phát đạt", "bãi tắm"],
+                "2": ["trần hưng đạo", "phước hải", "phát đạt"],
+                "3": ["trần hưng đạo", "phước hải", "phát đạt"],
+                "4": ["mả lạng", "chợ gà", "chợ gạo", "cầu ông lãnh", "bến thành", "lộc", "ntbloc"],
+                "5": ["mộc bài", "cao tốc", "giang", "bồi thường", "tái định cư"],
+                "6": ["rạch chiếc", "hội đồng thẩm định"],
+                "7": ["rạch chiếc", "hạ tầng kỹ thuật"]
+            }
+            stop_words = {"công", "viên", "trình", "thực", "hiện", "theo", "đầu", "tư", "phương", "thức", "đối", "tác", "báo", "cáo", "nghiên", "cứu", "khả", "thi", "ngày", "tháng", "năm", "thành", "phố"}
             for t in pending_tasks:
                 t_id = str(t.get("taskId") or t.get("task_id") or "").strip()
                 t_name = (t.get("taskName") or t.get("task_name") or "").lower()
                 clean_tname = re.sub(r'^(?:v\/v|về việc|dự án)\s*', '', t_name).strip()
-                kws = [w for w in re.split(r'[,.\s\-_/]+', clean_tname) if len(w) >= 3 and w not in ["công", "viên", "trình", "thực", "hiện", "theo", "đầu", "tư", "phương", "thức", "đối", "tác", "báo", "cáo", "nghiên", "cứu", "khả", "thi"]]
-                matches = sum(1 for kw in kws if kw in local_text.lower())
-                if matches >= 2:
-                    hint_task_id = t_id
-                    break
-
-        # Lỗi: Không xác định được số ID nhiệm vụ
-        if not hint_task_id:
-            return {
-                "success": True,
-                "task_id": "",
-                "status_decision": "needs_revision",
-                "deliverable": regex_meta.get("deliverable", "Văn bản"),
-                "document_number": regex_meta.get("document_number", ""),
-                "document_date": regex_meta.get("document_date", ""),
-                "actual_summary": "Chưa bóc tách do chưa xác định được Task ID",
-                "recipient_initials": regex_meta.get("recipient_initials", ""),
-                "assigned_staff": assignee_name,
-                "ai_review_comment": "Văn bản chưa khớp được với số thứ tự Task nào trên Bảng giao việc.",
-                "discrepancy_reason": "Vui lòng đặt tên file có số Task ở đầu (Ví dụ: '4 - Ten van ban.pdf') hoặc nhắn kèm 'Nộp task [số]'.",
-                "validation_errors": [
-                    "❌ Không xác định được số thứ tự ID nhiệm vụ tương ứng trên Bảng giao việc."
-                ],
-                "resolution_options": [
-                    "👉 Đổi lại tên file bắt đầu bằng số thứ tự ID của nhiệm vụ (Ví dụ: '4 - Chinh trang Ma Lang - Loc.pdf').",
-                    "👉 Hoặc nhắn kèm nội dung 'task 4' khi nộp ảnh văn bản."
-                ]
-            }
+                kws = [w for w in re.split(r'[,.\s\-_/]+', clean_tname) if len(w) >= 2 and w not in stop_words]
+                score = sum(1 for kw in kws if kw in local_text.lower())
+                
+                # Trọng số đặc trưng dự án
+                if t_id in distinctive_dict:
+                    for phrase in distinctive_dict[t_id]:
+                        if phrase in local_text.lower():
+                            score += 8
+                
+                # Trọng số chữ viết tắt nơi nhận
+                assignee = (t.get("assignee") or t.get("assigned_to") or "").lower()
+                if assignee:
+                    for full_name, valid_list in STAFF_INITIALS_MAP.items():
+                        if full_name in assignee or assignee in full_name:
+                            for init in valid_list:
+                                if init in local_text.lower():
+                                    score += 15
+                
+                if score > best_score and score >= 3:
+                    best_score = score
+                    best_task_id = t_id
+            
+            if best_task_id:
+                hint_task_id = best_task_id
 
         # Tìm task tương ứng trong pending_tasks
         matched_task = None
-        for t in pending_tasks:
-            t_id = str(t.get("taskId") or t.get("task_id") or "").strip()
-            if t_id == str(hint_task_id).strip():
-                matched_task = t
-                break
+        if hint_task_id:
+            for t in pending_tasks:
+                t_id = str(t.get("taskId") or t.get("task_id") or "").strip()
+                if t_id == str(hint_task_id).strip():
+                    matched_task = t
+                    break
 
         assigned_staff_in_task = (matched_task.get("assignee") or matched_task.get("assigned_to")) if matched_task else assignee_name
 
         prompt = f"""
 Bạn là Trợ lý Nghiệm thu & Thẩm định Thể thức Văn bản Hành chính (Phòng Hợp tác Công tư & Quản lý Nợ - Sở Tài Chính TP.HCM).
-Chuyên viên: {assignee_name} nộp tệp: "{filename}".
-Mã số Task ID bóc tách từ tên file: {hint_task_id}.
-Chuyên viên phụ trách theo Bảng giao việc: {assigned_staff_in_task}.
+Chuyên viên nộp: {assignee_name}.
+Tệp tin: "{filename}".
+Mã số Task ID dự đoán: {hint_task_id or 'Chưa rõ (Vui lòng tự xác định từ nội dung văn bản)'}.
+Chuyên viên phụ trách dự kiến: {assigned_staff_in_task}.
 
 DANH SÁCH NHIỆM VỤ TRÊN BẢNG GIAO VIỆC GOOGLE SHEETS:
 {json.dumps(pending_tasks, ensure_ascii=False, indent=2)}
@@ -285,37 +326,41 @@ KẾT QUẢ RÀ SOÁT SƠ BỘ TỪ BIỂU THỨC CHÍNH QUY (REGEX):
 - Chữ viết tắt nơi nhận gợi ý: {regex_meta.get('recipient_initials')}
 
 YÊU CẦU THẨM ĐỊNH CHI TIẾT (BẮT BUỘC):
-1. THỂ THỨC VĂN BẢN:
-   - "document_number": Tìm chính xác Số ký hiệu văn bản (Ví dụ: "7937 /UBND-PKT", "23920/STC-PPP&QLN", "145/TTr-STC-PPP"). Nếu văn bản chưa có số (còn để trống) thì để chuỗi rỗng "".
-   - "document_date": Ngày tháng năm ban hành (Định dạng "DD/MM/YYYY"). Nếu văn bản chưa có ngày thì để rỗng "".
+1. XÁC ĐỊNH CHÍNH XÁC TASK ID:
+   - Dựa vào nội dung, tên dự án và chữ viết tắt nơi nhận, xác định chính xác văn bản này thuộc Task ID nào (1, 2, 3, 4, 5, 6 hoặc 7).
+   - Ví dụ: Dự án Mả Lạng, Chợ Gà - Gạo hoặc chữ viết tắt NtbLoc thì PHẢI là Task 4! Dự án Rạch Chiếc là Task 6/7, Mộc Bài là Task 5, Trần Hưng Đạo là Task 1/2/3.
+   - "task_id": "Mã số Task ID chính xác nhất".
+
+2. THỂ THỨC VĂN BẢN:
+   - "document_number": Tìm chính xác Số ký hiệu văn bản (Ví dụ: "24586/STC-PPP&QLN", "7937 /UBND-PKT"). Nếu văn bản chưa có số (còn để trống) thì để chuỗi rỗng "".
+   - "document_date": Ngày tháng năm ban hành (Định dạng "DD/MM/YYYY", ví dụ: "25/08/2026"). Nếu văn bản chưa có ngày thì để rỗng "".
    - "deliverable": Xác định chuẩn loại sản phẩm: "Tờ trình", "Kết luận", "Báo cáo", "Quyết định", "Kế hoạch", "Thông báo", "Công văn".
    - "actual_summary": Trích yếu thực tế trong văn bản (bắt đầu bằng V/v hoặc Về việc...).
 
-2. ĐỐI SOÁT TRÍCH YẾU & TỪ KHÓA (KEYWORDS):
-   - So sánh trích yếu bóc tách với Tên nhiệm vụ / Trích yếu của Task #{hint_task_id}.
-   - KHÔNG CẦN TRÙNG 100% TỪNG CHỮ (vì trên Sheet có thể ghi vắn tắt tên dự án, trong khi văn bản ghi đầy đủ dài).
-   - "keyword_match": true nếu khớp các từ khóa cốt lõi của dự án (tên dự án, địa danh, đối tác, loại hợp đồng BT/BOT); false nếu nội dung nói về dự án khác hoặc từ khóa quá thấp.
+3. ĐỐI SOÁT TRÍCH YẾU & TỪ KHÓA (KEYWORDS):
+   - So sánh trích yếu bóc tách với Tên nhiệm vụ / Trích yếu của Task ID chuẩn xác vừa xác định ở Mục 1.
+   - "keyword_match": true nếu khớp các từ khóa cốt lõi của dự án; false nếu nội dung nói về dự án khác hoặc từ khóa quá thấp.
    - "matched_keywords": Danh sách các từ khóa dự án khớp được.
 
-3. ĐIỀU KIỆN TIÊN QUYẾT: DÒ NƠI NHẬN & CHỮ VIẾT TẮT CHUYÊN VIÊN:
+4. ĐIỀU KIỆN TIÊN QUYẾT: DÒ NƠI NHẬN & CHỮ VIẾT TẮT CHUYÊN VIÊN:
    - Tìm dòng cuối văn bản tại mục "Nơi nhận": "- Lưu: VT, PPP&QLN (..., ...b)."
-   - "recipient_initials": Trích chữ viết tắt trong ngoặc đơn (Ví dụ: "Nthoa", "pchan", "Ntbloc", "Hthgiang", "Vdman"...).
-   - "initials_match": true nếu chữ viết tắt này đúng là của chuyên viên được giao nhiệm vụ ({assigned_staff_in_task}); false nếu là của chuyên viên khác hoặc không tìm thấy.
+   - "recipient_initials": Trích chữ viết tắt trong ngoặc đơn (Ví dụ: "NtbLoc", "Nthoa", "pchan", "Hthgiang", "Vdman"...).
+   - "initials_match": true nếu chữ viết tắt này đúng là của chuyên viên được giao nhiệm vụ của Task ID đó; false nếu là của chuyên viên khác hoặc không tìm thấy.
 
-4. KẾT LUẬN NGHIỆM THU:
-   - "status_decision": "completed" nếu KHỚP ĐỦ: (1) Trích yếu/từ khóa khớp; (2) Có Số ký hiệu; (3) Có Ngày ban hành; (4) Chữ viết tắt nơi nhận khớp đúng chuyên viên phụ trách.
+5. KẾT LUẬN NGHIỆM THU:
+   - "status_decision": "completed" nếu KHỚP ĐỦ: (1) Trích yếu/từ khóa khớp đúng Task; (2) Có Số ký hiệu; (3) Có Ngày ban hành; (4) Chữ viết tắt nơi nhận khớp đúng chuyên viên phụ trách của Task đó.
    - Nếu vi phạm bất kỳ tiêu chí nào -> "needs_revision".
-   - "validation_errors": Danh sách các lỗi phát hiện (ví dụ: Thiếu số ký hiệu, Thiếu ngày, Sai chữ viết tắt nơi nhận...).
+   - "validation_errors": Danh sách các lỗi phát hiện.
 
 TRẢ VỀ ĐỊNH DẠNG JSON DUY NHẤT:
 {{
-  "task_id": "{hint_task_id}",
+  "task_id": "Số ID chính xác (ví dụ '4')",
   "status_decision": "completed" hoặc "needs_revision",
   "deliverable": "Loại sản phẩm (Tờ trình, Kết luận, Báo cáo, Công văn...)",
   "document_number": "Số ký hiệu văn bản hoặc rỗng",
   "document_date": "Ngày ban hành DD/MM/YYYY hoặc rỗng",
   "actual_summary": "Trích yếu thực tế trong file",
-  "recipient_initials": "Chữ viết tắt tại nơi nhận (ví dụ Nthoa, pchan...)",
+  "recipient_initials": "Chữ viết tắt tại nơi nhận (ví dụ NtbLoc, Nthoa...)",
   "keyword_match": true hoặc false,
   "matched_keywords": ["từ khóa 1", "từ khóa 2"],
   "initials_match": true hoặc false,
@@ -326,18 +371,20 @@ TRẢ VỀ ĐỊNH DẠNG JSON DUY NHẤT:
 """
         models_to_try = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-flash-latest"]
         last_error = None
-        ext = os.path.splitext(file_path)[1].lower()
         for model_name in models_to_try:
             try:
-                contents = [prompt]
-                if ext in [".jpg", ".jpeg", ".png"]:
-                    try:
-                        with open(file_path, "rb") as f_img:
-                            img_b = f_img.read()
-                        mime = "image/jpeg" if ext in [".jpg", ".jpeg"] else "image/png"
-                        contents = [types.Part.from_bytes(data=img_b, mime_type=mime), prompt]
-                    except Exception:
-                        pass
+                contents = []
+                for p in file_list:
+                    ext = os.path.splitext(p)[1].lower()
+                    if ext in [".jpg", ".jpeg", ".png"]:
+                        try:
+                            with open(p, "rb") as f_img:
+                                img_b = f_img.read()
+                            mime = "image/jpeg" if ext in [".jpg", ".jpeg"] else "image/png"
+                            contents.append(types.Part.from_bytes(data=img_b, mime_type=mime))
+                        except Exception:
+                            pass
+                contents.append(prompt)
                 resp = self.client.models.generate_content(
                     model=model_name,
                     contents=contents,
@@ -359,6 +406,16 @@ TRẢ VỀ ĐỊNH DẠNG JSON DUY NHẤT:
                     data["document_date"] = regex_meta.get("document_date")
                 if not data.get("recipient_initials") and regex_meta.get("recipient_initials"):
                     data["recipient_initials"] = regex_meta.get("recipient_initials")
+
+                # Cập nhật lại Task ID và Người phụ trách theo JSON Gemini xác định
+                final_task_id = str(data.get("task_id") or hint_task_id or "").strip()
+                if final_task_id:
+                    data["task_id"] = final_task_id
+                    for t in pending_tasks:
+                        t_id = str(t.get("taskId") or t.get("task_id") or "").strip()
+                        if t_id == final_task_id:
+                            assigned_staff_in_task = t.get("assignee") or t.get("assigned_to") or assigned_staff_in_task
+                            break
 
                 # Kiểm tra lại chữ viết tắt nơi nhận bằng Python deterministic logic
                 recip_init = data.get("recipient_initials", "")

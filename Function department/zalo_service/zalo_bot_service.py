@@ -89,6 +89,48 @@ def add_chat_message(chat_id: str, role: str, text: str):
     if len(hist) > MAX_HISTORY_PER_CHAT:
         CHAT_HISTORIES[chat_id] = hist[-MAX_HISTORY_PER_CHAT:]
 
+# Bộ đệm gom ảnh nhiều trang (Multi-page Image Buffer) và Lịch sử tin nhắn gần đây theo chat_id
+USER_IMAGE_BATCH = {}
+USER_IMAGE_LOCK = threading.Lock()
+RECENT_USER_TEXTS = {} # chat_id -> {"text": str, "time": float}
+
+def process_buffered_images(chat_id: str, sender_name: str, bot_key: str):
+    with USER_IMAGE_LOCK:
+        batch = USER_IMAGE_BATCH.pop(chat_id, None)
+    if not batch:
+        return
+    files = batch.get("files", [])
+    filenames = batch.get("filenames", [])
+    user_hint = batch.get("user_text", "")
+    
+    rec = RECENT_USER_TEXTS.get(chat_id)
+    if rec and (time.time() - rec.get("time", 0)) < 120:
+        if not user_hint:
+            user_hint = rec.get("text", "")
+        else:
+            user_hint += f" {rec.get('text', '')}"
+
+    display_fn = ", ".join(filenames) if filenames else "Tập hợp ảnh văn bản"
+    log_event(f"🔍 [{bot_key.upper()} BẮT ĐẦU THẨM ĐỊNH {len(files)} TRANG] '{display_fn}' từ {sender_name}")
+    
+    try:
+        review_reply = bot_agent.process_message(
+            user_text=user_hint or f"Nộp tài liệu {display_fn}",
+            sender_name=sender_name,
+            file_attachment_path=files if len(files) > 1 else files[0]
+        )
+        send_zalo_message(chat_id, review_reply, bot_key=bot_key)
+    except Exception as e:
+        log_event(f"❌ [{bot_key.upper()} Lỗi review file]: {e}")
+        send_zalo_message(chat_id, f"⚠️ Đã xảy ra lỗi khi thẩm định văn bản: {e}", bot_key=bot_key)
+    finally:
+        for p in files:
+            try:
+                if os.path.exists(p):
+                    os.remove(p)
+            except Exception:
+                pass
+
 try:
     from .integrated_bot_agent import IntegratedZaloBotAgent, is_task_reminder_intent
     bot_agent = IntegratedZaloBotAgent(api_key=GEMINI_API_KEY)
@@ -335,11 +377,9 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
     f_id, attached_filename, f_url = extract_attachment_info(msg_obj)
     
     file_attachment_path = None
+    display_fn = attached_filename or "Tài liệu văn bản"
     if f_id or f_url:
-        display_fn = attached_filename or "Tài liệu văn bản"
         log_event(f"📎 [{bot_key.upper()} NHẬN TỆP] Từ: {sender_name} | ChatID: {chat_id} | Tên file: '{display_fn}' (id={f_id})")
-        send_zalo_message(chat_id, f"📥 Đã tiếp nhận tệp: {display_fn} từ chuyên viên {sender_name}.\n🤖 AI Agent ({bot_cfg['name']}) đang tải xuống và tiến hành OCR & thẩm định...", bot_key=bot_key)
-        
         file_attachment_path = download_zalo_file(f_id, attached_filename, f_url, bot_key=bot_key)
         if not file_attachment_path:
             log_event(f"⚠️ [{bot_key.upper()}] Thất bại khi tải tệp '{display_fn}'")
@@ -365,26 +405,46 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
         send_zalo_message(chat_id, f"👋 Chào {sender_name}! Bot 1 đã nhận được tín hiệu nhưng chưa nhận diện được nội dung hoặc tệp tin hợp lệ. (Các trường: {keys_str})", bot_key=bot_key)
         return
 
-    # 1. Thẩm định tệp đính kèm (Ảnh Scan / PDF hợp lệ)
+    # 1. Thẩm định tệp đính kèm (Ảnh Scan / PDF hợp lệ qua Bộ đệm đa trang)
     if file_attachment_path and os.path.exists(file_attachment_path):
-        log_event(f"🔍 [{bot_key.upper()} OCR THẨM ĐỊNH] Đang gọi bot_agent để review file: '{attached_filename}'")
-        try:
-            review_reply = bot_agent.process_message(
-                user_text=raw_text or f"Nộp file {attached_filename}",
-                sender_name=sender_name,
-                file_attachment_path=file_attachment_path
-            )
-            send_zalo_message(chat_id, review_reply, bot_key=bot_key)
-        except Exception as e:
-            log_event(f"❌ [{bot_key.upper()} Lỗi review file]: {e}")
-            send_zalo_message(chat_id, f"⚠️ Đã xảy ra lỗi khi thẩm định tệp: {e}", bot_key=bot_key)
-        finally:
-            try:
-                if os.path.exists(file_attachment_path):
-                    os.remove(file_attachment_path)
-            except Exception:
-                pass
+        str_chat_id = str(chat_id)
+        with USER_IMAGE_LOCK:
+            if str_chat_id not in USER_IMAGE_BATCH:
+                USER_IMAGE_BATCH[str_chat_id] = {
+                    "files": [file_attachment_path],
+                    "filenames": [display_fn],
+                    "user_text": raw_text,
+                    "timer": None
+                }
+            else:
+                USER_IMAGE_BATCH[str_chat_id]["files"].append(file_attachment_path)
+                USER_IMAGE_BATCH[str_chat_id]["filenames"].append(display_fn)
+                if raw_text:
+                    if USER_IMAGE_BATCH[str_chat_id]["user_text"]:
+                        USER_IMAGE_BATCH[str_chat_id]["user_text"] += f" {raw_text}"
+                    else:
+                        USER_IMAGE_BATCH[str_chat_id]["user_text"] = raw_text
+                if USER_IMAGE_BATCH[str_chat_id]["timer"]:
+                    try:
+                        USER_IMAGE_BATCH[str_chat_id]["timer"].cancel()
+                    except Exception:
+                        pass
+
+            num_pages = len(USER_IMAGE_BATCH[str_chat_id]["files"])
+            if num_pages == 1:
+                send_zalo_message(chat_id, f"📥 Đã tiếp nhận trang 1 ({display_fn}) từ chuyên viên {sender_name}.\n👉 Nếu văn bản có nhiều trang (tiêu ngữ, nơi nhận/ký lưu), Anh/Chị gửi tiếp các trang còn lại nhé! (AI sẽ tổng hợp và tự động thẩm định sau 4 giây)", bot_key=bot_key)
+            else:
+                send_zalo_message(chat_id, f"📥 Đã gom {num_pages} trang ảnh... Đang tổng hợp toàn bộ văn bản để đối soát thể thức!", bot_key=bot_key)
+
+            # Debounce timer 4.0s: khi người dùng ngừng gửi ảnh thì bắt đầu thẩm định
+            t = threading.Timer(4.0, process_buffered_images, args=(str_chat_id, sender_name, bot_key))
+            USER_IMAGE_BATCH[str_chat_id]["timer"] = t
+            t.daemon = True
+            t.start()
         return
+
+    if raw_text:
+        RECENT_USER_TEXTS[str(chat_id)] = {"text": raw_text, "time": time.time()}
 
     print(f"\n📩 [{bot_key.upper()} TIN NHẮN] Từ: {sender_name} ({chat_type}) | ChatID: {chat_id} | Nội dung: '{raw_text}'", flush=True)
     clean_text = raw_text.lower()
@@ -595,7 +655,7 @@ def run_http_health_server():
             info = {
                 "status": "online",
                 "service": "Zalo Bot PPP Task Master (Bot 1)",
-                "version": "2.9.0-photo-ocr-task-match",
+                "version": "3.0.0-multi-page-task-match",
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "log_count": len(RECENT_LOGS)
             }

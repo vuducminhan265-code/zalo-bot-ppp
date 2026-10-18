@@ -157,7 +157,15 @@ class IntegratedZaloBotAgent:
         text_lower = user_text.lower() if user_text else ""
 
         # 1. File Attachment Submission Workflow with Automatic Google Sheets Sync
-        if file_attachment_path and os.path.exists(file_attachment_path):
+        is_valid_file = False
+        if isinstance(file_attachment_path, list) and any(os.path.exists(p) for p in file_attachment_path):
+            is_valid_file = True
+            file_name = ", ".join([os.path.basename(p) for p in file_attachment_path])
+        elif isinstance(file_attachment_path, str) and os.path.exists(file_attachment_path):
+            is_valid_file = True
+            file_name = os.path.basename(file_attachment_path)
+
+        if is_valid_file:
             if self.workspace_fetcher and self.ai_analyzer:
                 pending_tasks = self.workspace_fetcher.fetch_live_tasks()
                 review_res = self.ai_analyzer.review_submission(file_attachment_path, sender_name, pending_tasks, user_hint_text=user_text)
@@ -175,7 +183,6 @@ class IntegratedZaloBotAgent:
                     resolution_options = review_res.get("resolution_options", [])
                     ai_comment = review_res.get("ai_review_comment", "")
                     discrepancy = review_res.get("discrepancy_reason", "")
-                    file_name = os.path.basename(file_attachment_path)
 
                     if status_decision == "completed":
                         # Tự động cập nhật Google Sheets: Đã hoàn thành
