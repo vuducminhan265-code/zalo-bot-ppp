@@ -149,11 +149,11 @@ class TaskManager:
                     })
         return pending
 
-    def update_task_status_and_metadata(self, task_id: str, status: str, summary: str, file_name: str, doc_number: str = "", doc_date: str = "", actual_summary: str = "") -> bool:
+    def update_task_status_and_metadata(self, task_id: str, status: str, summary: str, file_name: str, doc_number: str = "", doc_date: str = "", actual_summary: str = "", deliverable: str = "") -> bool:
         """
         Cập nhật kết quả thẩm định lên Google Sheets:
         - status: 'Đã hoàn thành' hoặc 'Đang sửa lại'
-        - Điền: Số ký hiệu, Ngày ban hành, Trích yếu thực tế, Tóm tắt AI, Thời gian nộp, Tên file.
+        - Điền: Sản phẩm, Số ký hiệu, Ngày ban hành, Trích yếu thực tế, Tóm tắt AI, Thời gian nộp, Tên file.
         """
         if self.webhook_url:
             try:
@@ -164,7 +164,8 @@ class TaskManager:
                     "fileName": file_name,
                     "docNumber": doc_number,
                     "docDate": doc_date,
-                    "actualSummary": actual_summary
+                    "actualSummary": actual_summary,
+                    "deliverable": deliverable
                 }
                 res = session.post(self.webhook_url, json=payload, allow_redirects=True, timeout=25)
                 if res.status_code == 200:

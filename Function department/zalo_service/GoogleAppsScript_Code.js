@@ -60,7 +60,7 @@ function setupHeadersAndFormatting() {
     "Hạn hoàn thành",
     "Mức độ ưu tiên",
     "Trạng thái",
-    "Sản phẩm yêu cầu",
+    "Sản phẩm",
     "Trích yếu (Yêu cầu / Dự kiến)",
     "Số ký hiệu văn bản",
     "Ngày ban hành",
@@ -164,6 +164,7 @@ function doPost(e) {
     var docNumber = postData.docNumber || "";
     var docDate = postData.docDate || "";
     var actualSummary = postData.actualSummary || "";
+    var deliverable = postData.deliverable || "";
     
     var now = new Date();
     var formattedTime = Utilities.formatDate(now, "GMT+7", "yyyy-MM-dd HH:mm:ss");
@@ -201,6 +202,9 @@ function doPost(e) {
       statusCell.setBackground("#FEF7E0");
       statusCell.setFontColor("#B06000");
     }
+    
+    // Cập nhật Cột 7: Sản phẩm (Tờ trình, Kết luận, Báo cáo, Công văn...)
+    if (deliverable) sheet.getRange(targetRow, 7).setValue(deliverable);
     
     // Cập nhật trích yếu thực tế nếu có
     if (actualSummary) sheet.getRange(targetRow, 8).setValue(actualSummary);

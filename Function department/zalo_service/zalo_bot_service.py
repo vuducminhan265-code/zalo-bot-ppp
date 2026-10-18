@@ -81,10 +81,10 @@ def add_chat_message(chat_id: str, role: str, text: str):
         CHAT_HISTORIES[chat_id] = hist[-MAX_HISTORY_PER_CHAT:]
 
 try:
-    from .integrated_bot_agent import IntegratedZaloBotAgent
+    from .integrated_bot_agent import IntegratedZaloBotAgent, is_task_reminder_intent
     bot_agent = IntegratedZaloBotAgent(api_key=GEMINI_API_KEY)
 except Exception:
-    from integrated_bot_agent import IntegratedZaloBotAgent
+    from integrated_bot_agent import IntegratedZaloBotAgent, is_task_reminder_intent
     bot_agent = IntegratedZaloBotAgent(api_key=GEMINI_API_KEY)
 
 def call_gemini(chat_id: str, prompt: str, sender_name: str = "Chuyên viên") -> str:
@@ -107,6 +107,39 @@ def sanitize_zalo_text(raw_txt: str) -> str:
     t = re.sub(r'\n{3,}', '\n\n', t)
     return t.strip()
 
+def smart_split_zalo_message(text: str, max_len: int = 1800) -> list:
+    """Chia nhỏ tin nhắn Zalo thông minh theo dòng/câu/từ, tuyệt đối không cắt giữa chừng một từ hay khoản luật."""
+    if not text:
+        return []
+    if len(text) <= max_len:
+        return [text]
+
+    chunks = []
+    remaining = text
+    while len(remaining) > max_len:
+        # Tìm vị trí ngắt câu phù hợp gần max_len
+        cut_point = remaining.rfind("\n\n", 0, max_len)
+        if cut_point == -1 or cut_point < max_len * 0.4:
+            cut_point = remaining.rfind("\n", 0, max_len)
+        if cut_point == -1 or cut_point < max_len * 0.4:
+            cut_point = remaining.rfind(". ", 0, max_len)
+            if cut_point != -1:
+                cut_point += 1
+        if cut_point == -1 or cut_point < max_len * 0.4:
+            cut_point = remaining.rfind(" ", 0, max_len)
+
+        if cut_point == -1 or cut_point <= 0:
+            cut_point = max_len
+
+        chunk = remaining[:cut_point].strip()
+        if chunk:
+            chunks.append(chunk)
+        remaining = remaining[cut_point:].strip()
+
+    if remaining:
+        chunks.append(remaining)
+    return chunks
+
 def send_zalo_message(chat_id: str, text: str, bot_key: str = "bot1"):
     """Gửi tin nhắn phản hồi qua Zalo Bot API tương ứng với bot_key."""
     bot_cfg = BOTS.get(bot_key, BOTS["bot1"])
@@ -114,7 +147,7 @@ def send_zalo_message(chat_id: str, text: str, bot_key: str = "bot1"):
     clean_text = sanitize_zalo_text(text)
     try:
         url = f"{base_url}/sendMessage"
-        chunks = [clean_text[i:i+1850] for i in range(0, len(clean_text), 1850)]
+        chunks = smart_split_zalo_message(clean_text, max_len=1800)
         for chunk in chunks:
             payload = {
                 "chat_id": str(chat_id),
@@ -166,7 +199,7 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
     chat_type = chat.get("chat_type", "UNKNOWN")
     from_user = msg_obj.get("from", {})
     sender_name = from_user.get("display_name") or from_user.get("name") or "Chuyên viên"
-    raw_text = (msg_obj.get("text") or msg_obj.get("caption") or "").strip()
+    raw_text = (msg_obj.get("text") or msg_obj.get("caption") or msg_obj.get("data") or msg_obj.get("content") or "").strip()
     bot_cfg = BOTS.get(bot_key, BOTS["bot1"])
 
     # 0. Bóc tách tệp đính kèm (Document / File / Photo)
@@ -224,10 +257,9 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
     clean_text = raw_text.lower()
     
     # 2. Lệnh Nhắc việc / Báo cáo tiến độ (CHỈ DÀNH CHO BOT 1 - TASK MASTER)
-    task_keywords = ["/nhacviec", "nhacviec", "nhac việc", "nhắc việc", "nhac_viec", "/tasks", "tasks", "task", "/tiendo", "tiendo", "tien do", "tiến độ", "báo cáo tiến độ", "bao cao tien do", "danh sách task"]
-    if any(cmd in clean_text for cmd in task_keywords):
+    if is_task_reminder_intent(raw_text):
         if bot_key == "bot1":
-            print(f"--> [BOT1] Đang xuất báo cáo tiến độ từ Google Sheets...", flush=True)
+            print(f"--> [BOT1] Đang xuất báo cáo tiến độ từ Google Sheets theo yêu cầu ({raw_text})...", flush=True)
             try:
                 report_msg, guide_msg = task_fetcher.generate_reminder_parts()
                 send_zalo_message(chat_id, report_msg, bot_key=bot_key)
@@ -275,12 +307,14 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
         send_zalo_message(chat_id, ai_ans, bot_key=bot_key)
 
         # Gửi thông tin không đồng bộ tới n8n webhook (nếu chạy) để lưu trữ log mà không phát lặp tin nhắn
-        try:
-            n8n_port = os.getenv("N8N_PORT") or "5678"
-            n8n_url = f"http://127.0.0.1:{n8n_port}/webhook/{bot_cfg['webhook']}"
-            threading.Thread(target=lambda: requests.post(n8n_url, json={"chat_id": str(chat_id), "text": ai_query, "sender_name": sender_name}, timeout=5), daemon=True).start()
-        except Exception:
-            pass
+        def safe_n8n_post():
+            try:
+                n8n_port = os.getenv("N8N_PORT") or "5678"
+                n8n_url = f"http://127.0.0.1:{n8n_port}/webhook/{bot_cfg['webhook']}"
+                requests.post(n8n_url, json={"chat_id": str(chat_id), "text": ai_query, "sender_name": sender_name}, timeout=2)
+            except Exception:
+                pass
+        threading.Thread(target=safe_n8n_post, daemon=True).start()
 
 def poll_bot(bot_key: str):
     """Tiến trình duy trì Long-Polling cho từng Bot Zalo độc lập 24/7."""
@@ -318,7 +352,11 @@ def poll_bot(bot_key: str):
             data = resp.json()
             
             if not data.get("ok"):
-                time.sleep(1)
+                # 408 Request Timeout is standard Zalo long-polling response when no new updates arrive
+                if data.get("error_code") == 408:
+                    time.sleep(0.5)
+                else:
+                    time.sleep(1)
                 continue
                 
             res = data.get("result")
@@ -331,7 +369,19 @@ def poll_bot(bot_key: str):
                     up_id = item.get("update_id")
                     if up_id:
                         offset = max(offset, up_id + 1)
+                    
+                    # 1. Normal message or edited message
                     msg = item.get("message") or item.get("edited_message")
+                    
+                    # 2. Callback query from button click / quick reply
+                    if not msg and item.get("callback_query"):
+                        cb = item.get("callback_query", {})
+                        msg = cb.get("message") or {}
+                        if "data" in cb:
+                            msg["text"] = cb["data"]
+                        if "from" in cb:
+                            msg["from"] = cb["from"]
+                    
                     if msg:
                         threading.Thread(target=process_message, args=(msg, bot_key), daemon=True).start()
                         
@@ -339,6 +389,7 @@ def poll_bot(bot_key: str):
             continue
         except Exception as e:
             print(f"❌ [{bot_key.upper()}] Polling loop exception: {e}", flush=True)
+            time.sleep(5)
 def run_http_health_server():
     """Khởi chạy HTTP Server siêu nhẹ trên port 5678 cho Render Health Check 24/7 (chỉ tốn ~5MB RAM)."""
     from http.server import HTTPServer, BaseHTTPRequestHandler

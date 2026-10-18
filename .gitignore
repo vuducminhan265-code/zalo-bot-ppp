@@ -6,3 +6,8 @@ node_modules/
 .system_generated/
 .gemini/
 *credentials.json
+.venv/
+scratch/
+cookies.txt
+tvpl_article_377.txt
+temp_uploads/

@@ -1,6 +1,7 @@
 # Function department/tools/fetch_workspace_tasks.py
 import os
 import sys
+import re
 import json
 from datetime import datetime
 from typing import List, Dict, Any
@@ -57,7 +58,7 @@ class GoogleWorkspaceTaskFetcher:
         assignee_stats = {}
 
         for assignee, tasks in grouped.items():
-            lines.append(f"👤 **{assignee.upper()}** ({len(tasks)} nhiệm vụ chưa xong):")
+            lines.append(f"👤 {assignee.upper()} ({len(tasks)} nhiệm vụ chưa xong):")
             assignee_stats[assignee] = {
                 "pending": len(tasks),
                 "completed": assignee_completed.get(assignee, 0),
@@ -81,8 +82,23 @@ class GoogleWorkspaceTaskFetcher:
                     assignee_stats[assignee]["upcoming"] += 1
                     prio_icon = "🔹 [Trong hạn]"
 
-                lines.append(f"   • {prio_icon} [{t.get('task_id')}] {t.get('task_name')}")
-                lines.append(f"     ⏳ Deadline: {t.get('deadline')} ({t.get('days_diff_text')}) | Trạng thái: {t.get('status')}")
+                # Làm sạch triệt để các ký tự xuống dòng / tab khiến văn bản bị đứt khúc
+                raw_name = str(t.get('task_name') or "")
+                clean_name = re.sub(r'[\r\n\t]+', ' ', raw_name)
+                clean_name = re.sub(r'\s{2,}', ' ', clean_name).strip()
+
+                # Format ngày deadline đẹp (DD/MM/YYYY)
+                raw_dl = str(t.get('deadline') or "").strip()
+                fmt_dl = raw_dl
+                if re.match(r'^\d{4}-\d{2}-\d{2}$', raw_dl):
+                    parts = raw_dl.split('-')
+                    fmt_dl = f"{parts[2]}/{parts[1]}/{parts[0]}"
+
+                diff_text = t.get('days_diff_text', '')
+                deadline_display = f"{fmt_dl} ({diff_text})" if diff_text else fmt_dl
+
+                lines.append(f"• {prio_icon} [{t.get('task_id')}] {clean_name}")
+                lines.append(f"  ⏳ Hạn hoàn thành: {deadline_display} | Trạng thái: {t.get('status')}")
             lines.append("")
 
         lines.append("📊 **[THỐNG KÊ CHI TIẾT TỔNG HỢP TIẾN ĐỘ]**")
