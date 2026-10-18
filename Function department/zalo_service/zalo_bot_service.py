@@ -313,8 +313,56 @@ def download_zalo_file(file_id: str = None, file_name: str = None, direct_url: s
         log_event(f"⚠️ [{bot_key.upper()} Lỗi tải file Zalo]: {e}")
     return None
 
+def extract_all_attachments(msg_obj: dict) -> list:
+    """Bóc tách triệt để TOÀN BỘ các tệp/ảnh đính kèm trong tin nhắn Zalo Bot API."""
+    items = []
+    
+    # 1. Quét attachments mảng (Zalo gửi album hoặc nhiều ảnh cùng lúc)
+    atts = msg_obj.get("attachments")
+    if isinstance(atts, list):
+        for att in atts:
+            if isinstance(att, dict):
+                p = att.get("payload") if isinstance(att.get("payload"), dict) else att
+                f_id = p.get("file_id") or p.get("id") or p.get("token") or att.get("file_id")
+                f_url = p.get("url") or p.get("photo_url") or p.get("download_url") or p.get("file_url") or att.get("url")
+                f_name = p.get("file_name") or p.get("name") or p.get("title") or att.get("file_name")
+                if f_id or f_url:
+                    items.append((str(f_id) if f_id else None, f_name, f_url))
+                    
+    # 2. Quét trường photos mảng
+    photos = msg_obj.get("photo") or msg_obj.get("photos") or msg_obj.get("images")
+    if isinstance(photos, list):
+        for p in photos:
+            if isinstance(p, dict):
+                f_id = p.get("file_id") or p.get("id")
+                f_url = p.get("url") or p.get("photo_url")
+                f_name = p.get("file_name") or p.get("name")
+                if f_id or f_url:
+                    items.append((str(f_id) if f_id else None, f_name, f_url))
+                    
+    # 3. Fallback quét đệ quy đơn nếu không có dạng mảng
+    if not items:
+        f_id, f_name, f_url = extract_attachment_info(msg_obj)
+        if f_id or f_url:
+            items.append((f_id, f_name, f_url))
+            
+    # Chuẩn hóa tên tệp cho từng item nếu còn thiếu
+    normalized = []
+    for idx, (fid, fname, furl) in enumerate(items):
+        if not fname:
+            if furl:
+                path_part = furl.split("?")[0].rstrip("/")
+                cand = os.path.basename(path_part)
+                if "." in cand and len(cand) > 3 and any(cand.lower().endswith(ext) for ext in [".pdf", ".jpg", ".jpeg", ".png", ".doc", ".docx"]):
+                    fname = cand
+            if not fname:
+                fname = f"van_ban_scan_{int(time.time())}_{idx+1}.jpg"
+        normalized.append((fid, fname, furl))
+        
+    return normalized
+
 def extract_attachment_info(msg_obj: dict) -> tuple:
-    """Bóc tách triệt để mọi dạng tệp đính kèm (document, file, attachment, photo...) từ Zalo Bot API."""
+    """Bóc tách một tệp đính kèm đầu tiên từ Zalo Bot API (fallback)."""
     f_id = None
     f_name = None
     f_url = None
@@ -398,18 +446,18 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
         log_event(f"⚠️ [{bot_key.upper()}] Bỏ qua message không có chat_id: {msg_obj}")
         return
 
-    # 0. Bóc tách tệp đính kèm (Document / File / Photo / Attachment)
-    f_id, attached_filename, f_url = extract_attachment_info(msg_obj)
+    # 0. Bóc tách TOÀN BỘ các tệp đính kèm trong tin nhắn (hỗ trợ nhiều ảnh gửi cùng lúc)
+    all_attachments = extract_all_attachments(msg_obj)
+    downloaded_files = []
+    downloaded_names = []
     
-    file_attachment_path = None
-    display_fn = attached_filename or "Tài liệu văn bản"
-    if f_id or f_url:
+    for f_id, attached_filename, f_url in all_attachments:
+        display_fn = attached_filename or "Tài liệu văn bản"
         log_event(f"📎 [{bot_key.upper()} NHẬN TỆP] Từ: {sender_name} | ChatID: {chat_id} | Tên file: '{display_fn}' (id={f_id})")
-        file_attachment_path = download_zalo_file(f_id, attached_filename, f_url, bot_key=bot_key)
-        if not file_attachment_path:
-            log_event(f"⚠️ [{bot_key.upper()}] Thất bại khi tải tệp '{display_fn}'")
-            send_zalo_message(chat_id, f"⚠️ Hệ thống đã ghi nhận tệp '{display_fn}' nhưng không thể tải xuống từ Zalo Platform. Vui lòng gửi lại dưới dạng Tệp tin/Tài liệu (Document).", bot_key=bot_key)
-            return
+        local_p = download_zalo_file(f_id, attached_filename, f_url, bot_key=bot_key)
+        if local_p and os.path.exists(local_p):
+            downloaded_files.append(local_p)
+            downloaded_names.append(display_fn)
 
     # Kiểm tra sự kiện tệp không được Zalo Platform hỗ trợ truyền trực tiếp (PDF/Word/Docx)
     if msg_obj.get("event_name") == "message.unsupported.received":
@@ -424,26 +472,26 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
         send_zalo_message(chat_id, unsupported_msg, bot_key=bot_key)
         return
 
-    if not raw_text and not file_attachment_path:
+    if not raw_text and not downloaded_files:
         keys_str = ", ".join(list(msg_obj.keys())[:8])
         log_event(f"⚠️ [{bot_key.upper()} KHÔNG RÕ NỘI DUNG]: keys=[{keys_str}] | msg={msg_obj}")
         send_zalo_message(chat_id, f"👋 Chào {sender_name}! Bot 1 đã nhận được tín hiệu nhưng chưa nhận diện được nội dung hoặc tệp tin hợp lệ. (Các trường: {keys_str})", bot_key=bot_key)
         return
 
     # 1. Thẩm định tệp đính kèm (Ảnh Scan / PDF hợp lệ qua Bộ đệm đa trang)
-    if file_attachment_path and os.path.exists(file_attachment_path):
+    if downloaded_files:
         str_chat_id = str(chat_id)
         with USER_IMAGE_LOCK:
             if str_chat_id not in USER_IMAGE_BATCH:
                 USER_IMAGE_BATCH[str_chat_id] = {
-                    "files": [file_attachment_path],
-                    "filenames": [display_fn],
+                    "files": list(downloaded_files),
+                    "filenames": list(downloaded_names),
                     "user_text": raw_text,
                     "timer": None
                 }
             else:
-                USER_IMAGE_BATCH[str_chat_id]["files"].append(file_attachment_path)
-                USER_IMAGE_BATCH[str_chat_id]["filenames"].append(display_fn)
+                USER_IMAGE_BATCH[str_chat_id]["files"].extend(downloaded_files)
+                USER_IMAGE_BATCH[str_chat_id]["filenames"].extend(downloaded_names)
                 if raw_text:
                     if USER_IMAGE_BATCH[str_chat_id]["user_text"]:
                         USER_IMAGE_BATCH[str_chat_id]["user_text"] += f" {raw_text}"
