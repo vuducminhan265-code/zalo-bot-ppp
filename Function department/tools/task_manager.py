@@ -13,7 +13,8 @@ load_dotenv()
 
 SHEET_ID = "1RRb0PJB2EJv92SPHZ3_ahv2YYEn9bxjfC8JBPpTkuG4"
 SHEET_GID = "735957328"
-WEBHOOK_URL = os.getenv("GOOGLE_SHEETS_WEBHOOK_URL")
+DEFAULT_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycby2MGloAdgCZYFZ6QkEmfVBMnIOWZ7ZdTZqREIHKLurjbSCB66ohuLnBoReUq4MWvc/exec"
+WEBHOOK_URL = os.getenv("GOOGLE_SHEETS_WEBHOOK_URL") or DEFAULT_WEBHOOK_URL
 CSV_EXPORT_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={SHEET_GID}"
 
 session = requests.Session()
@@ -21,7 +22,7 @@ session = requests.Session()
 class TaskManager:
     def __init__(self, excel_path: str = "Zalo_Task_Tracker_Template.xlsx", webhook_url: str = None):
         self.excel_path = excel_path
-        self.webhook_url = webhook_url or WEBHOOK_URL
+        self.webhook_url = webhook_url or WEBHOOK_URL or DEFAULT_WEBHOOK_URL
 
     def get_all_tasks_from_sheet(self) -> list:
         """Đọc tức thì toàn bộ 13 cột từ Google Sheets (gid=735957328)."""
@@ -155,7 +156,8 @@ class TaskManager:
         - status: 'Đã hoàn thành' hoặc 'Đang sửa lại'
         - Điền: Sản phẩm, Số ký hiệu, Ngày ban hành, Trích yếu thực tế, Tóm tắt AI, Thời gian nộp, Tên file.
         """
-        if self.webhook_url:
+        webhook_url = self.webhook_url or os.getenv("GOOGLE_SHEETS_WEBHOOK_URL") or DEFAULT_WEBHOOK_URL
+        if webhook_url:
             try:
                 payload = {
                     "taskId": str(task_id).strip(),
@@ -167,7 +169,10 @@ class TaskManager:
                     "actualSummary": actual_summary,
                     "deliverable": deliverable
                 }
-                res = session.post(self.webhook_url, json=payload, allow_redirects=True, timeout=25)
+                res = requests.post(webhook_url, data=json.dumps(payload), headers={'Content-Type': 'application/json'}, allow_redirects=False, timeout=25)
+                if res.status_code in [301, 302] and "Location" in res.headers:
+                    echo_url = res.headers["Location"]
+                    res = requests.get(echo_url, timeout=25)
                 if res.status_code == 200:
                     data = res.json()
                     if data.get("success"):

@@ -112,6 +112,7 @@ def process_buffered_images(chat_id: str, sender_name: str, bot_key: str):
 
     display_fn = ", ".join(filenames) if filenames else "Tập hợp ảnh văn bản"
     log_event(f"🔍 [{bot_key.upper()} BẮT ĐẦU THẨM ĐỊNH {len(files)} TRANG] '{display_fn}' từ {sender_name}")
+    send_zalo_message(chat_id, f"📥 Đã tiếp nhận {len(files)} trang văn bản từ chuyên viên {sender_name}.\n🤖 AI đang tiến hành đối soát thể thức và đồng bộ Bảng giao việc...", bot_key=bot_key)
     
     try:
         review_reply = bot_agent.process_message(
@@ -430,13 +431,7 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
                     except Exception:
                         pass
 
-            num_pages = len(USER_IMAGE_BATCH[str_chat_id]["files"])
-            if num_pages == 1:
-                send_zalo_message(chat_id, f"📥 Đã tiếp nhận trang 1 ({display_fn}) từ chuyên viên {sender_name}.\n👉 Nếu văn bản có nhiều trang (tiêu ngữ, nơi nhận/ký lưu), Anh/Chị gửi tiếp các trang còn lại nhé! (AI sẽ tổng hợp và tự động thẩm định sau 4 giây)", bot_key=bot_key)
-            else:
-                send_zalo_message(chat_id, f"📥 Đã gom {num_pages} trang ảnh... Đang tổng hợp toàn bộ văn bản để đối soát thể thức!", bot_key=bot_key)
-
-            # Debounce timer 4.0s: khi người dùng ngừng gửi ảnh thì bắt đầu thẩm định
+            # Bộ đệm im lặng: chờ 4.0 giây sau trang ảnh cuối cùng để tổng hợp một lần duy nhất
             t = threading.Timer(4.0, process_buffered_images, args=(str_chat_id, sender_name, bot_key))
             USER_IMAGE_BATCH[str_chat_id]["timer"] = t
             t.daemon = True
@@ -494,8 +489,15 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
 
     # 4. PHÂN LUỒNG XỬ LÝ RIÊNG BIỆT - TUYỆT ĐỐI KHÔNG TRỘN LẪN CÔNG VIỆC BOT 1 VÀ BOT 2
     if bot_key == "bot1":
-        # Tra cứu Task cụ thể theo ID hoặc tên chuyên viên trên Bảng giao việc Google Sheets
-        task_id_match = re.search(r'\b(?:task|nhiệm vụ|stt|số)?\s*#?([0-9]{1,3})\b', clean_text)
+        # 4.1. Nhận diện chỉ định nộp bài (ví dụ: "nộp task 4", "nộp bài task 4", "nộp bài cho task 4")
+        if any(w in clean_text for w in ["nộp", "nop"]):
+            m_sub = re.search(r'\b(?:task|nhiệm vụ|stt|số)?\s*#?([0-9]{1,3})\b', clean_text)
+            sub_id = m_sub.group(1) if m_sub else ""
+            send_zalo_message(chat_id, f"📌 Đã ghi nhận chỉ định nộp bài cho Task #{sub_id if sub_id else 'được chọn'}.\n👉 Anh/Chị vui lòng gửi ảnh scan văn bản (có thể gửi nhiều ảnh liên tiếp), AI sẽ tự động đối soát và cập nhật hoàn thành trên Google Sheets!", bot_key=bot_key)
+            return
+
+        # 4.2. Tra cứu Task cụ thể theo cú pháp tra cứu thuần túy: "task 4", "task #4", "#4", "xem task 4"
+        task_id_match = re.search(r'^(?:xem\s+|tra\s+cứu\s+)?(?:task|nhiệm vụ|stt|số)?\s*#?([0-9]{1,3})$', clean_text.strip())
         if task_id_match:
             t_id = task_id_match.group(1)
             try:
@@ -655,7 +657,7 @@ def run_http_health_server():
             info = {
                 "status": "online",
                 "service": "Zalo Bot PPP Task Master (Bot 1)",
-                "version": "3.1.0-flexible-initials-and-issued-docs",
+                "version": "3.2.0-silent-buffer-live-sheets-sync",
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "log_count": len(RECENT_LOGS)
             }
