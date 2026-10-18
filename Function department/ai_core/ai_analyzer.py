@@ -121,7 +121,7 @@ class TaskAIAnalyzer:
                     img_bytes = f.read()
                 mime = "image/jpeg" if ext in [".jpg", ".jpeg"] else "image/png"
                 img_part = types.Part.from_bytes(data=img_bytes, mime_type=mime)
-                for m_name in ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-2.5-flash"]:
+                for m_name in ["gemini-3.5-flash-lite", "gemini-3.5-flash"]:
                     try:
                         resp = self.client.models.generate_content(
                             model=m_name,
@@ -220,58 +220,116 @@ class TaskAIAnalyzer:
     def review_submission(self, file_path, assignee_name: str, pending_tasks: list, user_hint_text: str = "") -> dict:
         """
         Quy trình Thẩm định Sản phẩm Tự động Đa tầng (Multi-Tier Rigorous Document Review):
-        1. Kiểm tra số ID nhiệm vụ ở đầu tên file hoặc tin nhắn đi kèm hoặc đối chiếu từ khóa trích yếu.
-        2. Bóc tách thể thức hành chính: Số ký hiệu, Ngày tháng, Sản phẩm (Tờ trình/Kết luận/Báo cáo/Công văn).
-        3. Dò trích yếu và đối chiếu từ khóa (Keywords) dự án.
+        1. Nhận diện Task ID chỉ định từ người nộp (target_task_id) hoặc tự động dò tìm.
+        2. Bóc tách & phân loại thông minh từng trang ảnh/văn bản: Trang đầu, Thân bài, Trang cuối nơi nhận.
+        3. Đối soát văn bản với chính xác Task ID được chỉ định. Nếu nộp sai dự án -> cảnh báo lỗi, không duyệt chéo.
         4. TIÊU CHÍ TUYÊN QUYẾT: Dò chữ viết tắt chuyên viên tại Nơi nhận (Lưu: VT, PPP&QLN (...)).
         5. Phân loại ĐẠT (completed) hoặc CẢNH BÁO LỖI (needs_revision) kèm hướng dẫn khắc phục.
         """
         file_list = file_path if isinstance(file_path, list) else [file_path]
         filenames = [os.path.basename(p) for p in file_list]
         filename = ", ".join(filenames)
-        hint_task_id = ""
-        for fn in filenames:
-            tid = self.extract_task_number_from_filename(fn)
-            if tid:
-                hint_task_id = tid
-                break
-        
+
         # 1. Trích xuất text từ văn bản / OCR ảnh và tự động nhận diện phân loại từng trang
         raw_pages = []
         for p in file_list:
             t = self._extract_text_fallback(p)
             if t:
-                # Phân loại trang thông minh
                 t_clean = re.sub(r'[*_`]', '', t)
-                is_header_page = any(kw in t_clean.upper() for kw in ["CỘNG HÒA XÃ HỘI", "ỦY BAN NHÂN DÂN", "SỞ TÀI CHÍNH", "SỐ:", "V/V", "VỀ VIỆC"])
-                is_signature_page = any(kw in t_clean.upper() for kw in ["NƠI NHẬN", "LƯU: VT", "KT. GIÁM ĐỐC", "PHÓ GIÁM ĐỐC", "GIÁM ĐỐC"])
+                is_header = any(kw in t_clean.upper() for kw in [
+                    "CỘNG HÒA XÃ HỘI", "ỦY BAN NHÂN DÂN", "SỞ TÀI CHÍNH", "SỐ:", "SỐ :", "V/V", "V/V:", "VỀ VIỆC", "ĐỘC LẬP – TỰ DO", "ĐỘC LẬP - TỰ DO"
+                ])
+                is_sig = any(kw in t_clean.upper() for kw in [
+                    "NƠI NHẬN", "NƠI NHẬN:", "LƯU: VT", "LƯU : VT", "KT. GIÁM ĐỐC", "PHÓ GIÁM ĐỐC", "GIÁM ĐỐC", "LƯU:"
+                ])
                 
-                priority = 2 # Mặc định trang thân bài
-                label = "TRANG NỘI DUNG VĂN BẢN"
-                if is_header_page:
-                    priority = 1 # Trang đầu có tiêu ngữ và trích yếu
-                    label = "TRANG ĐẦU (TIÊU NGỮ, SỐ KÝ HIỆU, NGÀY BAN HÀNH & TRÍCH YẾU)"
-                elif is_signature_page:
-                    priority = 3 # Trang cuối có nơi nhận và chữ ký
-                    label = "TRANG CUỐI (NƠI NHẬN, LƯU TRỮ VT & CHỮ KÝ LÃNH ĐẠO)"
-                    
-                raw_pages.append((priority, label, t, p))
-        
+                if is_header and not is_sig:
+                    prio = 1
+                    page_role = "Trang đầu (Tiêu ngữ, Số ký hiệu, Ngày ban hành & Trích yếu)"
+                elif is_sig and not is_header:
+                    prio = 3
+                    page_role = "Trang cuối (Nơi nhận, Ký lưu VT & Chữ ký Lãnh đạo)"
+                elif is_header and is_sig:
+                    prio = 1
+                    page_role = "Văn bản 1 trang trọn vẹn (Đầy đủ Tiêu ngữ và Nơi nhận)"
+                else:
+                    prio = 2
+                    page_role = "Trang nội dung văn bản"
+                raw_pages.append((prio, page_role, t, p))
+            else:
+                raw_pages.append((2, "Trang nội dung văn bản", "", p))
+
         # Sắp xếp đúng thứ tự: Trang đầu -> Thân bài -> Trang cuối (bất kể thứ tự người dùng nộp ảnh)
         raw_pages.sort(key=lambda x: x[0])
         
-        extracted_texts = [f"=== {label} ===\n{t}" for _, label, t, _ in raw_pages]
+        page_structure_lines = []
+        for idx, (prio, role, _, p) in enumerate(raw_pages, 1):
+            fn_base = os.path.basename(p)
+            page_structure_lines.append(f"• Trang {idx} ({fn_base}): {role}")
+        page_structure_text = "\n".join(page_structure_lines)
+
+        extracted_texts = [f"=== [TRANG {idx}: {role}] ===\n{t}" for idx, (prio, role, t, _) in enumerate(raw_pages, 1)]
         local_text = "\n\n--------------------\n\n".join(extracted_texts) if extracted_texts else ""
         regex_meta = self._extract_regex_metadata(local_text)
 
-        # 2. Nếu tên file chưa có Task ID, tìm trong tin nhắn đi kèm (user_hint_text)
-        if not hint_task_id and user_hint_text:
-            m_text = re.search(r'\b(?:task|nhiệm vụ|stt|số)?\s*#?([0-9]{1,3})\b', user_hint_text, re.IGNORECASE)
-            if m_text:
-                hint_task_id = m_text.group(1)
+        # 2. Xác định Task ID người dùng CHỈ ĐỊNH RÕ RÀNG (Explicit Target Task ID)
+        explicit_target_task_id = None
+        if user_hint_text:
+            clean_hint = user_hint_text.lower().strip()
+            # Bắt các cú pháp: nộp task 4, nop task 4, gửi task 4, task 4, t4, nv 4, #4
+            m_act = re.search(r'(?:nộp|nop|gửi|gui|cho|bài|bai)\s*(?:bài\s*)?(?:cho\s*)?(?:task|nhiệm\s*vụ|nv|stt|số|t)?\s*#?([0-9]{1,3})\b', clean_hint)
+            m_s = re.search(r'\b(?:task|t|nv)\s*#?([0-9]{1,3})\b', clean_hint)
+            m_single = re.match(r'^(?:#)?([0-9]{1,3})$', clean_hint)
+            if m_act:
+                explicit_target_task_id = m_act.group(1)
+            elif m_s:
+                explicit_target_task_id = m_s.group(1)
+            elif m_single:
+                explicit_target_task_id = m_single.group(1)
 
-        # 3. Tự động dò Task ID có điểm số khớp cao nhất (Best Match Score)
-        if not hint_task_id and local_text:
+        if not explicit_target_task_id:
+            for fn in filenames:
+                tid = self.extract_task_number_from_filename(fn)
+                if tid:
+                    explicit_target_task_id = tid
+                    break
+
+        target_task_id = str(explicit_target_task_id).strip() if explicit_target_task_id else ""
+        target_task_name = ""
+        target_assignee = assignee_name
+        matched_target_task = None
+
+        if explicit_target_task_id:
+            for t in pending_tasks:
+                t_id = str(t.get("taskId") or t.get("task_id") or "").strip()
+                if t_id == str(explicit_target_task_id).strip():
+                    matched_target_task = t
+                    break
+
+            distinctive_dict_names = {
+                "1": ("Dự án Bãi tắm Thùy Vân - Trần Hưng Đạo", "Nguyễn Thế Hòa"),
+                "2": ("Dự án 247 Trần Hưng Đạo", "Nguyễn Thế Hòa"),
+                "3": ("Dự án Phước Hải - Phát Đạt", "Nguyễn Thế Hòa"),
+                "4": ("Dự án Chỉnh trang Khu Mả Lạng và Chợ Gà - Gạo", "Nguyễn Trung Bảo Lộc"),
+                "5": ("Dự án Cao tốc TP.HCM - Mộc Bài", "Hoàng Thị Hương Giang"),
+                "6": ("Dự án Khu liên hợp TDTT Rạch Chiếc", "Nguyễn Thế Hòa"),
+                "7": ("Dự án Hạ tầng kỹ thuật Rạch Chiếc", "Nguyễn Thế Hòa")
+            }
+
+            if matched_target_task:
+                target_task_name = matched_target_task.get("taskName") or matched_target_task.get("task_name") or ""
+                target_assignee = matched_target_task.get("assignee") or matched_target_task.get("assigned_to") or assignee_name
+            elif target_task_id in distinctive_dict_names:
+                target_task_name, target_assignee = distinctive_dict_names[target_task_id]
+            else:
+                target_task_name = f"Nhiệm vụ Task #{target_task_id}"
+                target_assignee = assignee_name
+
+            assigned_staff_in_task = target_assignee
+            hint_task_id = target_task_id
+        else:
+            # 3. Tự động dò Task ID có điểm số khớp cao nhất nếu người dùng không chỉ định rõ
+            hint_task_id = ""
             best_task_id = None
             best_score = 0
             distinctive_dict = {
@@ -312,23 +370,43 @@ class TaskAIAnalyzer:
             
             if best_task_id:
                 hint_task_id = best_task_id
+                for t in pending_tasks:
+                    t_id = str(t.get("taskId") or t.get("task_id") or "").strip()
+                    if t_id == str(hint_task_id).strip():
+                        matched_target_task = t
+                        break
+            assigned_staff_in_task = (matched_target_task.get("assignee") or matched_target_task.get("assigned_to")) if matched_target_task else assignee_name
 
-        # Tìm task tương ứng trong pending_tasks
-        matched_task = None
-        if hint_task_id:
-            for t in pending_tasks:
-                t_id = str(t.get("taskId") or t.get("task_id") or "").strip()
-                if t_id == str(hint_task_id).strip():
-                    matched_task = t
-                    break
+        if explicit_target_task_id:
+            task_instruction = f"""
+*** YÊU CẦU ĐỐI SOÁT CHÍNH XÁC VỚI NHIỆM VỤ ĐƯỢC CHỈ ĐỊNH (TASK #{explicit_target_task_id}) ***:
+- Người nộp đã ghi rõ muốn nộp cho Task #{explicit_target_task_id}: "{target_task_name}"
+- Chuyên viên phụ trách theo Bảng giao việc: "{target_assignee}"
 
-        assigned_staff_in_task = (matched_task.get("assignee") or matched_task.get("assigned_to")) if matched_task else assignee_name
+BẠN BẮT BUỘC PHẢI ĐỐI SOÁT NỘI DUNG VĂN BẢN VỚI ĐÚNG TASK #{explicit_target_task_id}:
+1. "task_id": Bắt buộc ghi là "{explicit_target_task_id}". TUYỆT ĐỐI KHÔNG ĐƯỢC ĐỔI SANG TASK ID KHÁC!
+2. ĐỐI SOÁT TRÍCH YẾU & DỰ ÁN:
+   - So sánh nội dung văn bản với nhiệm vụ: "{target_task_name}".
+   - NẾU VĂN BẢN LÀ CỦA DỰ ÁN KHÁC (Ví dụ: văn bản nói về Dự án Mả Lạng, Chợ Gà - Gạo hoặc dự án khác thay vì {target_task_name}):
+     + "keyword_match": false
+     + "initials_match": false
+     + "status_decision": "needs_revision"
+     + "validation_errors": ["❌ LỖI TRÍCH YẾU: Văn bản nộp thuộc dự án khác, không khớp với nhiệm vụ được giao (Task #{explicit_target_task_id}: {target_task_name} - Phụ trách: {target_assignee})."]
+     + "ai_review_comment": "Văn bản nộp không khớp với nhiệm vụ Task #{explicit_target_task_id} ({target_task_name}). Đề nghị chuyên viên kiểm tra lại."
+     + TUYỆT ĐỐI KHÔNG duyệt completed cho Task #{explicit_target_task_id}!
+"""
+        else:
+            task_instruction = f"""
+*** TỰ ĐỘNG DÒ TÌM TASK ID TƯƠNG ỨNG TRÊN BẢNG GIAO VIỆC ***:
+- Người nộp không chỉ định cụ thể Task ID. Dựa vào nội dung, tên dự án và chữ viết tắt nơi nhận, xác định chính xác văn bản này thuộc Task ID nào (ví dụ: '4').
+- Gợi ý dự đoán: Task #{hint_task_id or 'Chưa rõ'}.
+"""
 
         prompt = f"""
 Bạn là Trợ lý Nghiệm thu & Thẩm định Thể thức Văn bản Hành chính (Phòng Hợp tác Công tư & Quản lý Nợ - Sở Tài Chính TP.HCM).
 Chuyên viên nộp: {assignee_name}.
 Tệp tin: "{filename}".
-Mã số Task ID dự đoán: {hint_task_id or 'Chưa rõ (Vui lòng tự xác định từ nội dung văn bản)'}.
+Mục tiêu nhiệm vụ: {hint_task_id or 'Tự động dò tìm'}.
 Chuyên viên phụ trách dự kiến: {assigned_staff_in_task}.
 
 DANH SÁCH NHIỆM VỤ TRÊN BẢNG GIAO VIỆC GOOGLE SHEETS:
@@ -345,24 +423,24 @@ KẾT QUẢ RÀ SOÁT SƠ BỘ TỪ BIỂU THỨC CHÍNH QUY (REGEX):
 - Loại văn bản gợi ý: {regex_meta.get('deliverable')}
 - Chữ viết tắt nơi nhận gợi ý: {regex_meta.get('recipient_initials')}
 
-YÊU CẦU THẨM ĐỊNH CHI TIẾT (BẮT BUỘC):
-1. XÁC ĐỊNH CHÍNH XÁC TASK ID:
-   - Dựa vào nội dung, tên dự án và chữ viết tắt nơi nhận, xác định chính xác văn bản này thuộc Task ID nào (1, 2, 3, 4, 5, 6 hoặc 7).
-   - Ví dụ: Dự án Mả Lạng, Chợ Gà - Gạo hoặc chữ viết tắt NtbLoc thì PHẢI là Task 4! Dự án Rạch Chiếc là Task 6/7, Mộc Bài là Task 5, Trần Hưng Đạo là Task 1/2/3.
-   - "task_id": "Mã số Task ID chính xác nhất".
+CẤU TRÚC TÀI LIỆU NHẬN DIỆN:
+{page_structure_text}
 
-2. THỂ THỨC VĂN BẢN:
+{task_instruction}
+
+YÊU CẦU THẨM ĐỊNH THỂ THỨC (THEO NGHỊ ĐỊNH 30/2020/NĐ-CP):
+1. THỂ THỨC VĂN BẢN:
    - "document_number": Tìm chính xác Số ký hiệu văn bản (Ví dụ: "24586/STC-PPP&QLN", "7937 /UBND-PKT"). Nếu văn bản chưa có số (còn để trống) thì để chuỗi rỗng "".
    - "document_date": Ngày tháng năm ban hành (Định dạng "DD/MM/YYYY", ví dụ: "25/08/2026"). Nếu văn bản chưa có ngày thì để rỗng "".
    - "deliverable": Xác định chuẩn loại sản phẩm: "Tờ trình", "Kết luận", "Báo cáo", "Quyết định", "Kế hoạch", "Thông báo", "Công văn".
    - "actual_summary": Trích yếu thực tế trong văn bản (bắt đầu bằng V/v hoặc Về việc...).
 
-3. ĐỐI SOÁT TRÍCH YẾU & TỪ KHÓA (KEYWORDS):
-   - So sánh trích yếu bóc tách với Tên nhiệm vụ / Trích yếu của Task ID chuẩn xác vừa xác định ở Mục 1.
+2. ĐỐI SOÁT TRÍCH YẾU & TỪ KHÓA (KEYWORDS):
+   - So sánh trích yếu bóc tách với Tên nhiệm vụ / Trích yếu của Task ID thẩm định.
    - "keyword_match": true nếu khớp các từ khóa cốt lõi của dự án; false nếu nội dung nói về dự án khác hoặc từ khóa quá thấp.
    - "matched_keywords": Danh sách các từ khóa dự án khớp được.
 
-4. ĐỐI SOÁT NƠI NHẬN & CHỮ VIẾT TẮT CHUYÊN VIÊN (LINH HOẠT TUYỆT ĐỐI):
+3. ĐỐI SOÁT NƠI NHẬN & CHỮ VIẾT TẮT CHUYÊN VIÊN (LINH HOẠT TUYỆT ĐỐI):
    - Tìm dòng cuối văn bản tại mục "Nơi nhận": "- Lưu: VT, PPP&QLN (..., ...b)."
    - "recipient_initials": Trích chữ viết tắt trong ngoặc đơn (Ví dụ: "NtbLoc", "ntbloc", "Nthoa", "pchan", "Hthgiang", "Vdman"...).
    - "initials_match": 
@@ -370,9 +448,9 @@ YÊU CẦU THẨM ĐỊNH CHI TIẾT (BẮT BUỘC):
      + NẾU KHÔNG CÓ DÒNG NƠI NHẬN (do người nộp chỉ chụp trang đầu có Tiêu ngữ/Số/Ngày/Trích yếu): VẪN ĐỂ "initials_match": true và KHÔNG ĐƯỢC coi là lỗi, vì văn bản đã có Số và Ngày ban hành chính thức!
      + Chỉ để false nếu chữ viết tắt rõ ràng của một chuyên viên KHÁC trong phòng.
 
-5. KẾT LUẬN NGHIỆM THU:
+4. KẾT LUẬN NGHIỆM THU:
    - "status_decision": "completed" nếu: (1) Trích yếu/từ khóa khớp đúng Task; (2) Có Số ký hiệu chính thức; (3) Có Ngày ban hành chính thức; (4) Chữ viết tắt nơi nhận không bị xung đột với người khác.
-   - Chỉ trả về "needs_revision" nếu vi phạm: Sai nội dung dự án, hoặc văn bản chưa có Số ký hiệu chính thức, hoặc chưa có Ngày ban hành.
+   - Trả về "needs_revision" nếu vi phạm: Sai nội dung dự án, hoặc văn bản chưa có Số ký hiệu chính thức, hoặc chưa có Ngày ban hành.
    - "validation_errors": Danh sách lỗi (để mảng rỗng [] nếu văn bản đạt chuẩn hoặc là bản chính thức đã có Số và Ngày).
 
 TRẢ VỀ ĐỊNH DẠNG JSON DUY NHẤT:
@@ -392,20 +470,20 @@ TRẢ VỀ ĐỊNH DẠNG JSON DUY NHẤT:
   "resolution_options": ["Hướng dẫn 1", "Hướng dẫn 2"]
 }}
 """
-        models_to_try = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-flash-latest"]
+        models_to_try = ["gemini-3.5-flash-lite", "gemini-3.5-flash"]
         last_error = None
         for model_name in models_to_try:
             try:
                 contents = []
-                # Đưa ảnh đã phân loại theo đúng thứ tự logic vào multimodal contents
-                sorted_files = [p for _, _, _, p in raw_pages] if raw_pages else file_list
-                for p in sorted_files:
+                # Đưa ảnh đã phân loại theo đúng thứ tự logic vào multimodal contents kèm nhãn vai trò
+                for prio, role, _, p in raw_pages:
                     ext = os.path.splitext(p)[1].lower()
                     if ext in [".jpg", ".jpeg", ".png"]:
                         try:
                             with open(p, "rb") as f_img:
                                 img_b = f_img.read()
                             mime = "image/jpeg" if ext in [".jpg", ".jpeg"] else "image/png"
+                            contents.append(types.Part.from_text(text=f"[ẢNH ĐÍNH KÈM: {role}]"))
                             contents.append(types.Part.from_bytes(data=img_b, mime_type=mime))
                         except Exception:
                             pass
@@ -423,6 +501,7 @@ TRẢ VỀ ĐỊNH DẠNG JSON DUY NHẤT:
                 raw_text = re.sub(r"```$", "", raw_text).strip()
                 data = json.loads(raw_text)
                 data["success"] = True
+                data["page_structure_text"] = page_structure_text
 
                 # Hậu kiểm tra deterministic nếu regex bắt được tốt hơn
                 if not data.get("document_number") and regex_meta.get("document_number"):
@@ -432,36 +511,74 @@ TRẢ VỀ ĐỊNH DẠNG JSON DUY NHẤT:
                 if not data.get("recipient_initials") and regex_meta.get("recipient_initials"):
                     data["recipient_initials"] = regex_meta.get("recipient_initials")
 
-                # Cập nhật lại Task ID và Người phụ trách theo JSON Gemini xác định
-                final_task_id = str(data.get("task_id") or hint_task_id or "").strip()
-                if final_task_id:
-                    data["task_id"] = final_task_id
-                    for t in pending_tasks:
-                        t_id = str(t.get("taskId") or t.get("task_id") or "").strip()
-                        if t_id == final_task_id:
-                            assigned_staff_in_task = t.get("assignee") or t.get("assigned_to") or assigned_staff_in_task
-                            break
+                # Cập nhật lại Task ID và Người phụ trách
+                if explicit_target_task_id and matched_target_task:
+                    data["task_id"] = str(explicit_target_task_id).strip()
+                    data["assigned_staff"] = target_assignee
+                else:
+                    final_task_id = str(data.get("task_id") or hint_task_id or "").strip()
+                    if final_task_id:
+                        data["task_id"] = final_task_id
+                        for t in pending_tasks:
+                            t_id = str(t.get("taskId") or t.get("task_id") or "").strip()
+                            if t_id == final_task_id:
+                                assigned_staff_in_task = t.get("assignee") or t.get("assigned_to") or assigned_staff_in_task
+                                break
+                    data["assigned_staff"] = assigned_staff_in_task
+
+                current_task_id = str(data.get("task_id", "")).strip()
+                current_assignee = data.get("assigned_staff", assigned_staff_in_task)
 
                 # Kiểm tra lại chữ viết tắt nơi nhận bằng Python deterministic logic
                 recip_init = data.get("recipient_initials", "")
                 if recip_init:
-                    verified_match = self.check_initials_match_assignee(recip_init, assigned_staff_in_task)
+                    verified_match = self.check_initials_match_assignee(recip_init, current_assignee)
                     data["initials_match"] = verified_match
                 else:
                     # Nếu ảnh không chứa dòng nơi nhận (chỉ chụp trang đầu) nhưng đã có đủ Số và Ngày chính thức
                     if data.get("document_number") and data.get("document_date"):
                         data["initials_match"] = True
 
-                # Tổng hợp danh sách lỗi một cách chuẩn xác, bỏ các lỗi hiểu nhầm của LLM
-                clean_errors = []
-                if not data.get("keyword_match"):
+                # Hậu kiểm tra chéo dự án: nếu nộp cho Task X nhưng trích yếu thuộc dự án của Task Y
+                clean_errors = list(data.get("validation_errors", []))
+                actual_sum_lower = (data.get("actual_summary") or local_text).lower()
+                distinctive_dict = {
+                    "1": ["trần hưng đạo", "phước hải", "phát đạt", "bãi tắm"],
+                    "2": ["trần hưng đạo", "phước hải", "phát đạt"],
+                    "3": ["trần hưng đạo", "phước hải", "phát đạt"],
+                    "4": ["mả lạng", "chợ gà", "chợ gạo", "cầu ông lãnh", "bến thành"],
+                    "5": ["mộc bài", "cao tốc", "tây ninh", "bồi thường, hỗ trợ, tái định cư"],
+                    "6": ["rạch chiếc", "hội đồng thẩm định"],
+                    "7": ["rạch chiếc", "hạ tầng kỹ thuật"]
+                }
+                other_proj = None
+                for other_id, kws in distinctive_dict.items():
+                    if other_id != current_task_id:
+                        for kw in kws:
+                            if kw in actual_sum_lower:
+                                other_proj = (other_id, kw)
+                                break
+                        if other_proj:
+                            break
+                target_kws = distinctive_dict.get(current_task_id, [])
+                target_kw_matched = any(kw in actual_sum_lower for kw in target_kws) if target_kws else True
+
+                if other_proj and not target_kw_matched:
+                    data["keyword_match"] = False
+                    err_msg = f"❌ LỖI TRÍCH YẾU: Văn bản nộp thuộc dự án khác (phát hiện từ khóa '{other_proj[1]}'), không khớp với nhiệm vụ được chỉ định (Task #{current_task_id} - Phụ trách: {current_assignee})."
+                    if not any("LỖI TRÍCH YẾU" in e for e in clean_errors):
+                        clean_errors.insert(0, err_msg)
+                    data["status_decision"] = "needs_revision"
+                    data["ai_review_comment"] = f"Văn bản nộp không khớp với nhiệm vụ Task #{current_task_id}."
+
+                if not data.get("keyword_match") and not any("LỖI TRÍCH YẾU" in e for e in clean_errors):
                     clean_errors.append("❌ LỖI TRÍCH YẾU: Nội dung trích yếu không khớp hoặc từ khóa quá thấp so với nhiệm vụ được giao.")
-                if not data.get("document_number"):
+                if not data.get("document_number") and not any("LỖI THỂ THỨC: Văn bản chưa có Số" in e for e in clean_errors):
                     clean_errors.append("❌ LỖI THỂ THỨC: Văn bản chưa có Số ký hiệu chính thức (còn để trống).")
-                if not data.get("document_date"):
+                if not data.get("document_date") and not any("LỖI THỂ THỨC: Văn bản chưa có Ngày" in e for e in clean_errors):
                     clean_errors.append("❌ LỖI THỂ THỨC: Văn bản chưa có Ngày tháng năm ban hành chính thức.")
-                if recip_init and not data.get("initials_match"):
-                    clean_errors.append(f"❌ LỖI NGƯỜI PHỤ TRÁCH: Chữ viết tắt tại Nơi nhận là '{recip_init}', không khớp với chuyên viên được giao nhiệm vụ ('{assigned_staff_in_task}').")
+                if recip_init and not data.get("initials_match") and not any("LỖI NGƯỜI PHỤ TRÁCH" in e for e in clean_errors):
+                    clean_errors.append(f"❌ LỖI NGƯỜI PHỤ TRÁCH: Chữ viết tắt tại Nơi nhận là '{recip_init}', không khớp với chuyên viên được giao nhiệm vụ ('{current_assignee}').")
 
                 data["validation_errors"] = clean_errors
                 
@@ -469,17 +586,19 @@ TRẢ VỀ ĐỊNH DẠNG JSON DUY NHẤT:
                 if len(clean_errors) == 0 and data.get("keyword_match") and data.get("document_number") and data.get("document_date") and data.get("initials_match", True):
                     data["status_decision"] = "completed"
                     if not recip_init:
-                        data["recipient_initials"] = f"Khớp theo Số/Ngày chính thức ({assigned_staff_in_task})"
+                        data["recipient_initials"] = f"Khớp theo Số/Ngày chính thức ({current_assignee})"
+                    data["resolution_options"] = [
+                        "Hồ sơ hợp lệ, đã cập nhật kết quả nghiệm thu lên Google Sheets."
+                    ]
                 else:
                     data["status_decision"] = "needs_revision"
-                    if not data.get("resolution_options"):
-                        data["resolution_options"] = [
-                            "👉 Kiểm tra và bổ sung đầy đủ Số ký hiệu, Ngày tháng năm ban hành văn bản.",
-                            f"👉 Kiểm tra chữ viết tắt chuyên viên tại mục Nơi nhận (Lưu: VT, PPP&QLN (...)) bảo đảm đúng tên người phụ trách ({assigned_staff_in_task}).",
-                            "👉 Nộp lại tệp văn bản sau khi đã hoàn thiện thể thức."
-                        ]
+                    data["resolution_options"] = [
+                        f"👉 Kiểm tra và nộp đúng văn bản của Task #{current_task_id} (Phụ trách: {current_assignee}).",
+                        "👉 Nếu đây là văn bản của nhiệm vụ khác, vui lòng gửi kèm cú pháp chỉ định đúng (ví dụ: `nộp task 4`).",
+                        "👉 Đảm bảo chụp rõ cả Trang đầu (Số ký hiệu, Ngày ban hành) và Trang cuối (Nơi nhận, Chữ ký Lãnh đạo)."
+                    ]
 
-                data["assigned_staff"] = assigned_staff_in_task
+                data["assigned_staff"] = current_assignee
                 return data
             except Exception as e:
                 last_error = str(e)

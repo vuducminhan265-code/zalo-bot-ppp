@@ -112,7 +112,7 @@ def process_buffered_images(chat_id: str, sender_name: str, bot_key: str):
 
     display_fn = ", ".join(filenames) if filenames else "Tập hợp ảnh văn bản"
     log_event(f"🔍 [{bot_key.upper()} BẮT ĐẦU THẨM ĐỊNH {len(files)} TRANG] '{display_fn}' từ {sender_name}")
-    send_zalo_message(chat_id, f"📥 Đã tiếp nhận {len(files)} trang văn bản từ chuyên viên {sender_name}.\n🤖 AI đang tiến hành đối soát thể thức và đồng bộ Bảng giao việc...", bot_key=bot_key)
+    send_zalo_message(chat_id, f"🤖 Đã gom đủ {len(files)} trang văn bản từ chuyên viên {sender_name}.\nĐang tổng hợp toàn bộ văn bản để đối soát thể thức và đồng bộ Bảng giao việc...", bot_key=bot_key)
     
     try:
         review_reply = bot_agent.process_message(
@@ -489,6 +489,13 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
                     "user_text": raw_text,
                     "timer": None
                 }
+                c_now = len(downloaded_files)
+                send_zalo_message(
+                    chat_id,
+                    f"📥 Đã tiếp nhận {c_now} trang ảnh từ chuyên viên {sender_name}.\n"
+                    f"👉 Nếu văn bản còn trang khác (trang tiêu ngữ hoặc nơi nhận/chữ ký), Anh/Chị gửi tiếp trong vòng 6 giây hoặc gõ cú pháp `nộp task [số]` (ví dụ: `nộp task 4`).",
+                    bot_key=bot_key
+                )
             else:
                 USER_IMAGE_BATCH[str_chat_id]["files"].extend(downloaded_files)
                 USER_IMAGE_BATCH[str_chat_id]["filenames"].extend(downloaded_names)
@@ -502,9 +509,16 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
                         USER_IMAGE_BATCH[str_chat_id]["timer"].cancel()
                     except Exception:
                         pass
+                c_total = len(USER_IMAGE_BATCH[str_chat_id]["files"])
+                send_zalo_message(
+                    chat_id,
+                    f"📥 Đã nhận thêm {len(downloaded_files)} trang ảnh (Tổng cộng: {c_total} trang).\n"
+                    f"⏳ Đang chờ thêm trang tiếp theo hoặc bắt đầu đối soát sau 6 giây...",
+                    bot_key=bot_key
+                )
 
-            # Bộ đệm im lặng: chờ 4.0 giây sau trang ảnh cuối cùng để tổng hợp một lần duy nhất
-            t = threading.Timer(4.0, process_buffered_images, args=(str_chat_id, sender_name, bot_key))
+            # Bộ đệm: chờ 6.0 giây sau trang ảnh cuối cùng để chuyên viên kịp gửi ảnh tiếp theo
+            t = threading.Timer(6.0, process_buffered_images, args=(str_chat_id, sender_name, bot_key))
             USER_IMAGE_BATCH[str_chat_id]["timer"] = t
             t.daemon = True
             t.start()
@@ -572,17 +586,18 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
                 else:
                     USER_IMAGE_BATCH[str_chat_id]["user_text"] = raw_text
                 
-                # Rút ngắn timer còn 2.5s để bắt đầu thẩm định ngay lập tức sau gợi ý này
+                # Rút ngắn timer còn 2.0s để bắt đầu thẩm định ngay lập tức sau gợi ý này
                 if USER_IMAGE_BATCH[str_chat_id].get("timer"):
                     try:
                         USER_IMAGE_BATCH[str_chat_id]["timer"].cancel()
                     except Exception:
                         pass
-                t = threading.Timer(2.5, process_buffered_images, args=(str_chat_id, sender_name, bot_key))
+                send_zalo_message(chat_id, f"📌 Đã ghi nhận chỉ định `{raw_text}` cho tập ảnh vừa gửi. Đang bắt đầu đối soát ngay...", bot_key=bot_key)
+                t = threading.Timer(2.0, process_buffered_images, args=(str_chat_id, sender_name, bot_key))
                 USER_IMAGE_BATCH[str_chat_id]["timer"] = t
                 t.daemon = True
                 t.start()
-                return  # Xử lý im lặng, liên kết trực tiếp vào ảnh vừa gửi mà không xả tin nhắn thừa!
+                return  # Xử lý liên kết trực tiếp vào ảnh vừa gửi
 
         # 4.1. Tra cứu chi tiết một Task (chỉ khi gõ rõ: xem task 4, tra cứu task 4, thông tin task 4)
         info_match = re.search(r'^(?:xem|tra\s*cứu|chi\s*tiết|thông\s*tin)\s*(?:task|nhiệm\s*vụ|nv)?\s*#?([0-9]{1,3})$', clean_text.strip())

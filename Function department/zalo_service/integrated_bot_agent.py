@@ -167,8 +167,8 @@ class IntegratedZaloBotAgent:
 
         if is_valid_file:
             if self.workspace_fetcher and self.ai_analyzer:
-                pending_tasks = self.workspace_fetcher.fetch_live_tasks()
-                review_res = self.ai_analyzer.review_submission(file_attachment_path, sender_name, pending_tasks, user_hint_text=user_text)
+                all_sheet_tasks = self.workspace_fetcher.task_manager.get_all_tasks_from_sheet() if hasattr(self.workspace_fetcher, 'task_manager') and self.workspace_fetcher.task_manager else self.workspace_fetcher.fetch_live_tasks()
+                review_res = self.ai_analyzer.review_submission(file_attachment_path, sender_name, all_sheet_tasks, user_hint_text=user_text)
                 
                 if review_res.get("success"):
                     status_decision = review_res.get("status_decision")
@@ -204,11 +204,16 @@ class IntegratedZaloBotAgent:
 
                         sheets_status_text = 'ĐÃ TỰ ĐỘNG CẬP NHẬT TRẠNG THÁI "ĐÃ HOÀN THÀNH" 🟢' if sheets_updated else 'Đã thẩm định hoàn thành đạt chuẩn 🟢'
                         initials_text = f"{recipient_initials} (Khớp chuyên viên: {assigned_staff})" if recipient_initials else f"Khớp chuyên viên: {assigned_staff}"
+                        page_structure = review_res.get("page_structure_text", "")
                         resp = [
                             "✅ [KẾT QUẢ THẨM ĐỊNH & NGHIỆM THU TỰ ĐỘNG - PHÒNG PPP]",
                             f"👤 Người nộp: {sender_name}",
                             f"📄 Tệp văn bản: {file_name}",
-                            f"🔢 Đối soát: Khớp chuẩn Task #{task_id} (Phụ trách: {assigned_staff})",
+                            f"🔢 Đối soát: Khớp chuẩn Task #{task_id} (Phụ trách: {assigned_staff})"
+                        ]
+                        if page_structure:
+                            resp.append(f"📑 Cấu trúc ảnh nhận diện:\n{page_structure}")
+                        resp.extend([
                             f"📦 Sản phẩm: {deliverable}",
                             f"📑 Thể thức: Số {doc_number if doc_number else 'Văn bản nội bộ'} | Ngày {doc_date if doc_date else 'Hiện hành'}",
                             f"✍️ Ký lưu nơi nhận: {initials_text}",
@@ -218,7 +223,7 @@ class IntegratedZaloBotAgent:
                             f"📊 Bảng giao việc Google Sheets: {sheets_status_text}",
                             "🔗 Tra cứu trực tiếp: https://docs.google.com/spreadsheets/d/1RRb0PJB2EJv92SPHZ3_ahv2YYEn9bxjfC8JBPpTkuG4/edit?gid=735957328",
                             "🎉 Chúc mừng đồng chí đã hoàn thành xuất sắc nhiệm vụ được giao!"
-                        ]
+                        ])
                         return "\n".join(resp)
                     else:
                         # Tự động cập nhật Google Sheets: Đang sửa lại (nếu có task_id)
@@ -264,11 +269,16 @@ class IntegratedZaloBotAgent:
                         if assigned_staff and recipient_initials and not review_res.get("initials_match", True):
                             initials_display += f" (Khác chuyên viên phụ trách: {assigned_staff})"
 
+                        page_structure = review_res.get("page_structure_text", "")
                         resp = [
                             "⚠️ [CẢNH BÁO THẨM ĐỊNH AI: TỆP NỘP CHƯA ĐẠT CHUẨN CÔNG VỤ]",
                             f"👤 Người nộp: {sender_name}",
                             f"📄 Tệp văn bản: {file_name}",
-                            f"🔢 Đối soát: Task #{task_id if task_id else 'Không xác định'}",
+                            f"🔢 Đối soát: Task #{task_id if task_id else 'Không xác định'} (Phụ trách: {assigned_staff})"
+                        ]
+                        if page_structure:
+                            resp.append(f"📑 Cấu trúc ảnh nhận diện:\n{page_structure}")
+                        resp.extend([
                             f"📦 Sản phẩm phát hiện: {deliverable}",
                             f"📑 Thể thức bóc tách: Số {doc_number if doc_number else 'Chưa có'} | Ngày {doc_date if doc_date else 'Chưa có'}",
                             f"✍️ Ký hiệu nơi nhận: {initials_display}",
@@ -284,7 +294,7 @@ class IntegratedZaloBotAgent:
                             f"📊 Bảng giao việc Google Sheets: {sheets_warning_text}",
                             "🔗 Tra cứu trực tiếp: https://docs.google.com/spreadsheets/d/1RRb0PJB2EJv92SPHZ3_ahv2YYEn9bxjfC8JBPpTkuG4/edit?gid=735957328",
                             "👉 Đề nghị chuyên viên chỉnh sửa hoàn thiện và nộp lại tệp văn bản."
-                        ]
+                        ])
                         return "\n".join(resp)
 
         # 2. Google Workspace Task Query Workflow (Flexible triggers: nv, nhắc việc, tiến độ, /nhacviec...)
