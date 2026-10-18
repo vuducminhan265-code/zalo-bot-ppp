@@ -220,6 +220,13 @@ function doPost(e) {
     sheet.getRange(targetRow, 12).setValue(formattedTime);
     sheet.getRange(targetRow, 13).setValue(fileName);
     
+    // Tự động kẻ bảng, wrap text và căn lề toàn bộ hàng vừa cập nhật (cột 1 đến 13)
+    var updatedRowRange = sheet.getRange(targetRow, 1, 1, 13);
+    updatedRowRange.setBorder(true, true, true, true, true, true, "#DADCE0", SpreadsheetApp.BorderStyle.SOLID);
+    updatedRowRange.setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
+    updatedRowRange.setVerticalAlignment("middle");
+    updatedRowRange.setFontSize(10);
+    
     SpreadsheetApp.flush();
     return ContentService.createTextOutput(JSON.stringify({
       success: true,
