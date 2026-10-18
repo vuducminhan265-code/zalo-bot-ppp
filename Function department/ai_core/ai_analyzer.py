@@ -146,8 +146,9 @@ class TaskAIAnalyzer:
         if not text:
             return meta
 
-        # 1. Trích xuất Số ký hiệu văn bản (Ví dụ: Số: 7937 /UBND-PKT hoặc 23920/STC-PPP&QLN)
-        doc_num_match = re.search(r'Số:\s*([0-9A-Za-z\/\-_\.\s]+?)(?=\s+ngày|\s*\n|\s+V\/v|\s+Về)', text, re.IGNORECASE)
+        # 1. Trích xuất Số ký hiệu văn bản (Ví dụ: Số: 7937 /UBND-PKT hoặc 24586/STC-PPP&QLN)
+        clean_text_for_num = re.sub(r'[*_`]', '', text)
+        doc_num_match = re.search(r'Số:\s*([0-9A-Za-z\/\-_\.\s&]+?)(?=\s+ngày|\s*\n|\s+V\/v|\s+Về|$)', clean_text_for_num, re.IGNORECASE)
         if doc_num_match:
             candidate = doc_num_match.group(1).strip()
             # Làm sạch khoảng trắng thừa
@@ -156,7 +157,7 @@ class TaskAIAnalyzer:
                 meta["document_number"] = candidate
 
         # 2. Trích xuất Ngày ban hành (Ví dụ: ngày 29 tháng 9 năm 2026)
-        date_match = re.search(r'(?:ngày|ngy)\s+(\d{1,2})\s+(?:tháng|thng)\s+(\d{1,2})\s+(?:năm|nm)\s+(\d{4})', text, re.IGNORECASE)
+        date_match = re.search(r'(?:ngày|ngy)\s+(\d{1,2})\s+(?:tháng|thng)\s+(\d{1,2})\s+(?:năm|nm)\s+(\d{4})', clean_text_for_num, re.IGNORECASE)
         if date_match:
             day, month, year = date_match.group(1), date_match.group(2), date_match.group(3)
             meta["document_date"] = f"{int(day):02d}/{int(month):02d}/{year}"
@@ -235,13 +236,32 @@ class TaskAIAnalyzer:
                 hint_task_id = tid
                 break
         
-        # 1. Trích xuất text từ văn bản / OCR ảnh (gộp tất cả các trang nếu nộp nhiều ảnh)
-        extracted_texts = []
+        # 1. Trích xuất text từ văn bản / OCR ảnh và tự động nhận diện phân loại từng trang
+        raw_pages = []
         for p in file_list:
             t = self._extract_text_fallback(p)
             if t:
-                extracted_texts.append(t)
-        local_text = "\n\n--- TRANG TIẾP THEO ---\n\n".join(extracted_texts) if extracted_texts else ""
+                # Phân loại trang thông minh
+                t_clean = re.sub(r'[*_`]', '', t)
+                is_header_page = any(kw in t_clean.upper() for kw in ["CỘNG HÒA XÃ HỘI", "ỦY BAN NHÂN DÂN", "SỞ TÀI CHÍNH", "SỐ:", "V/V", "VỀ VIỆC"])
+                is_signature_page = any(kw in t_clean.upper() for kw in ["NƠI NHẬN", "LƯU: VT", "KT. GIÁM ĐỐC", "PHÓ GIÁM ĐỐC", "GIÁM ĐỐC"])
+                
+                priority = 2 # Mặc định trang thân bài
+                label = "TRANG NỘI DUNG VĂN BẢN"
+                if is_header_page:
+                    priority = 1 # Trang đầu có tiêu ngữ và trích yếu
+                    label = "TRANG ĐẦU (TIÊU NGỮ, SỐ KÝ HIỆU, NGÀY BAN HÀNH & TRÍCH YẾU)"
+                elif is_signature_page:
+                    priority = 3 # Trang cuối có nơi nhận và chữ ký
+                    label = "TRANG CUỐI (NƠI NHẬN, LƯU TRỮ VT & CHỮ KÝ LÃNH ĐẠO)"
+                    
+                raw_pages.append((priority, label, t, p))
+        
+        # Sắp xếp đúng thứ tự: Trang đầu -> Thân bài -> Trang cuối (bất kể thứ tự người dùng nộp ảnh)
+        raw_pages.sort(key=lambda x: x[0])
+        
+        extracted_texts = [f"=== {label} ===\n{t}" for _, label, t, _ in raw_pages]
+        local_text = "\n\n--------------------\n\n".join(extracted_texts) if extracted_texts else ""
         regex_meta = self._extract_regex_metadata(local_text)
 
         # 2. Nếu tên file chưa có Task ID, tìm trong tin nhắn đi kèm (user_hint_text)
@@ -377,7 +397,9 @@ TRẢ VỀ ĐỊNH DẠNG JSON DUY NHẤT:
         for model_name in models_to_try:
             try:
                 contents = []
-                for p in file_list:
+                # Đưa ảnh đã phân loại theo đúng thứ tự logic vào multimodal contents
+                sorted_files = [p for _, _, _, p in raw_pages] if raw_pages else file_list
+                for p in sorted_files:
                     ext = os.path.splitext(p)[1].lower()
                     if ext in [".jpg", ".jpeg", ".png"]:
                         try:
