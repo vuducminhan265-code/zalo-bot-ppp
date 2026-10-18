@@ -132,6 +132,30 @@ def process_buffered_images(chat_id: str, sender_name: str, bot_key: str):
             except Exception:
                 pass
 
+def extract_task_submission_intent(text: str):
+    """
+    Nhận diện linh hoạt mọi biến thể nộp bài hoặc chỉ định task:
+    - nộp task 4, Nộp task 4, nop task 4, Nop task 4, nop 4, nộp 4
+    - nộp bài task 4, nop bai task 4, bài task 4, cho task 4, nộp cho task 4
+    - task 4, Task 4, task4, t4, T4, nv 4, nv4, #4
+    Trả về task_id (chuỗi số, ví dụ '4') hoặc None.
+    """
+    if not text:
+        return None
+    clean = text.lower().strip()
+    
+    # 1. Các biến thể có hành động nộp / gửi / cho
+    m_action = re.search(r'(?:nộp|nop|gửi|gui|cho|bài|bai)\s*(?:bài\s*)?(?:cho\s*)?(?:task|nhiệm\s*vụ|nv|stt|số|t)?\s*#?([0-9]{1,3})\b', clean)
+    if m_action:
+        return m_action.group(1)
+        
+    # 2. Cú pháp viết tắt: task 4, task4, t4, nv4, nv 4, #4
+    m_short = re.match(r'^(?:task|t|nv)?\s*#?([0-9]{1,3})$', clean)
+    if m_short:
+        return m_short.group(1)
+        
+    return None
+
 try:
     from .integrated_bot_agent import IntegratedZaloBotAgent, is_task_reminder_intent
     bot_agent = IntegratedZaloBotAgent(api_key=GEMINI_API_KEY)
@@ -489,17 +513,33 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
 
     # 4. PHÂN LUỒNG XỬ LÝ RIÊNG BIỆT - TUYỆT ĐỐI KHÔNG TRỘN LẪN CÔNG VIỆC BOT 1 VÀ BOT 2
     if bot_key == "bot1":
-        # 4.1. Nhận diện chỉ định nộp bài (ví dụ: "nộp task 4", "nộp bài task 4", "nộp bài cho task 4")
-        if any(w in clean_text for w in ["nộp", "nop"]):
-            m_sub = re.search(r'\b(?:task|nhiệm vụ|stt|số)?\s*#?([0-9]{1,3})\b', clean_text)
-            sub_id = m_sub.group(1) if m_sub else ""
-            send_zalo_message(chat_id, f"📌 Đã ghi nhận chỉ định nộp bài cho Task #{sub_id if sub_id else 'được chọn'}.\n👉 Anh/Chị vui lòng gửi ảnh scan văn bản (có thể gửi nhiều ảnh liên tiếp), AI sẽ tự động đối soát và cập nhật hoàn thành trên Google Sheets!", bot_key=bot_key)
-            return
+        str_chat_id = str(chat_id)
 
-        # 4.2. Tra cứu Task cụ thể theo cú pháp tra cứu thuần túy: "task 4", "task #4", "#4", "xem task 4"
-        task_id_match = re.search(r'^(?:xem\s+|tra\s+cứu\s+)?(?:task|nhiệm vụ|stt|số)?\s*#?([0-9]{1,3})$', clean_text.strip())
-        if task_id_match:
-            t_id = task_id_match.group(1)
+        # 4.0. Nếu người dùng đang gửi ảnh và ảnh đang nằm trong bộ đệm chờ thẩm định:
+        with USER_IMAGE_LOCK:
+            if str_chat_id in USER_IMAGE_BATCH:
+                # Ghi nhận ngay tin nhắn này làm gợi ý (task 4, nộp task 4, nop task 4...)
+                if USER_IMAGE_BATCH[str_chat_id]["user_text"]:
+                    USER_IMAGE_BATCH[str_chat_id]["user_text"] += f" {raw_text}"
+                else:
+                    USER_IMAGE_BATCH[str_chat_id]["user_text"] = raw_text
+                
+                # Rút ngắn timer còn 2.5s để bắt đầu thẩm định ngay lập tức sau gợi ý này
+                if USER_IMAGE_BATCH[str_chat_id].get("timer"):
+                    try:
+                        USER_IMAGE_BATCH[str_chat_id]["timer"].cancel()
+                    except Exception:
+                        pass
+                t = threading.Timer(2.5, process_buffered_images, args=(str_chat_id, sender_name, bot_key))
+                USER_IMAGE_BATCH[str_chat_id]["timer"] = t
+                t.daemon = True
+                t.start()
+                return  # Xử lý im lặng, liên kết trực tiếp vào ảnh vừa gửi mà không xả tin nhắn thừa!
+
+        # 4.1. Tra cứu chi tiết một Task (chỉ khi gõ rõ: xem task 4, tra cứu task 4, thông tin task 4)
+        info_match = re.search(r'^(?:xem|tra\s*cứu|chi\s*tiết|thông\s*tin)\s*(?:task|nhiệm\s*vụ|nv)?\s*#?([0-9]{1,3})$', clean_text.strip())
+        if info_match:
+            t_id = info_match.group(1)
             try:
                 live_tasks = task_fetcher.fetch_live_tasks()
                 matched = [t for t in live_tasks if str(t.get("taskId") or t.get("task_id", "")).strip() == t_id]
@@ -525,6 +565,13 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
                     return
             except Exception as e:
                 log_event(f"Lỗi tra cứu task #{t_id}: {e}")
+
+        # 4.2. Nhận diện mọi biến thể nộp bài / chỉ định task (task 4, Task 4, nộp task 4, nop task 4, t4, nv 4, #4...)
+        sub_id = extract_task_submission_intent(clean_text)
+        if sub_id:
+            RECENT_USER_TEXTS[str_chat_id] = {"text": raw_text, "time": time.time()}
+            send_zalo_message(chat_id, f"📌 Đã ghi nhận chỉ định nộp bài cho Task #{sub_id} từ chuyên viên {sender_name}.\n👉 Mời Anh/Chị gửi ảnh scan văn bản (có thể gửi nhiều trang liên tiếp), AI sẽ tự động đối soát và cập nhật hoàn thành trên Google Sheets!", bot_key=bot_key)
+            return
 
         # Với mọi tin nhắn khác không thuộc Bảng giao việc, Bot 1 KHÔNG gọi RAG Pháp lý mà hướng dẫn sang Bot 2
         redirect_msg = (
@@ -657,7 +704,7 @@ def run_http_health_server():
             info = {
                 "status": "online",
                 "service": "Zalo Bot PPP Task Master (Bot 1)",
-                "version": "3.2.0-silent-buffer-live-sheets-sync",
+                "version": "3.3.0-flexible-task-intent-and-sync",
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "log_count": len(RECENT_LOGS)
             }
