@@ -160,7 +160,7 @@ class IntegratedZaloBotAgent:
         if file_attachment_path and os.path.exists(file_attachment_path):
             if self.workspace_fetcher and self.ai_analyzer:
                 pending_tasks = self.workspace_fetcher.fetch_live_tasks()
-                review_res = self.ai_analyzer.review_submission(file_attachment_path, sender_name, pending_tasks)
+                review_res = self.ai_analyzer.review_submission(file_attachment_path, sender_name, pending_tasks, user_hint_text=user_text)
                 
                 if review_res.get("success"):
                     status_decision = review_res.get("status_decision")

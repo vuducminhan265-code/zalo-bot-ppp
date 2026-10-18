@@ -270,7 +270,7 @@ def extract_attachment_info(msg_obj: dict) -> tuple:
                 break
                 
         # Check url / download_url
-        for k in ["url", "download_url", "downloadUrl", "file_url", "fileUrl", "href"]:
+        for k in ["photo_url", "photoUrl", "url", "download_url", "downloadUrl", "file_url", "fileUrl", "image_url", "imageUrl", "href"]:
             val = str(d.get(k) or "").strip()
             if val and val.startswith("http"):
                 if not f_url: f_url = val
@@ -307,10 +307,13 @@ def extract_attachment_info(msg_obj: dict) -> tuple:
         if f_url:
             path_part = f_url.split("?")[0].rstrip("/")
             candidate = os.path.basename(path_part)
-            if "." in candidate and len(candidate) > 3:
+            if "." in candidate and len(candidate) > 3 and any(candidate.lower().endswith(ext) for ext in [".pdf", ".jpg", ".jpeg", ".png", ".doc", ".docx"]):
                 f_name = candidate
         if not f_name:
-            f_name = f"van_ban_{f_id or 'dinh_kem'}.pdf"
+            if f_url and any(img_marker in f_url.lower() for img_marker in ["jpg", "jpeg", "png", "photo", "image", "zdn.vn"]):
+                f_name = f"van_ban_scan_{int(time.time())}.jpg"
+            else:
+                f_name = f"van_ban_{f_id or 'dinh_kem'}.pdf"
 
     return f_id, f_name, f_url
 
@@ -437,18 +440,26 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
             t_id = task_id_match.group(1)
             try:
                 live_tasks = task_fetcher.fetch_live_tasks()
-                matched = [t for t in live_tasks if str(t.get("task_id", "")).strip() == t_id]
+                matched = [t for t in live_tasks if str(t.get("taskId") or t.get("task_id", "")).strip() == t_id]
                 if matched:
                     task_info = matched[0]
+                    t_name = task_info.get("taskName") or task_info.get("task_name")
+                    t_assignee = task_info.get("assignee") or task_info.get("assigned_to")
+                    t_deadline = task_info.get("deadline")
+                    t_status = task_info.get("status")
+                    t_deliv = task_info.get("deliverable") or "Văn bản"
                     reply_task = (
                         f"📌 **Thông tin Bảng giao việc - Task #{t_id}:**\n"
-                        f"• **Nhiệm vụ**: {task_info.get('task_name')}\n"
-                        f"• **Chuyên viên phụ trách**: {task_info.get('assigned_to')}\n"
-                        f"• **Hạn hoàn thành**: {task_info.get('deadline')}\n"
-                        f"• **Trạng thái**: {task_info.get('status')}\n"
-                        f"• **Sản phẩm**: {task_info.get('deliverable', 'Văn bản')}"
+                        f"• **Nhiệm vụ**: {t_name}\n"
+                        f"• **Chuyên viên phụ trách**: {t_assignee}\n"
+                        f"• **Hạn hoàn thành**: {t_deadline}\n"
+                        f"• **Trạng thái**: {t_status}\n"
+                        f"• **Sản phẩm**: {t_deliv}"
                     )
                     send_zalo_message(chat_id, reply_task, bot_key=bot_key)
+                    return
+                else:
+                    send_zalo_message(chat_id, f"⚠️ Không tìm thấy Task #{t_id} trên Bảng giao việc Google Sheets. Hiện tại phòng đang có các task từ #1 đến #{len(live_tasks)}.", bot_key=bot_key)
                     return
             except Exception as e:
                 log_event(f"Lỗi tra cứu task #{t_id}: {e}")
@@ -584,7 +595,7 @@ def run_http_health_server():
             info = {
                 "status": "online",
                 "service": "Zalo Bot PPP Task Master (Bot 1)",
-                "version": "2.8.0-strict-isolation",
+                "version": "2.9.0-photo-ocr-task-match",
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "log_count": len(RECENT_LOGS)
             }

@@ -109,6 +109,19 @@ class TaskAIAnalyzer:
                 return "\n".join(lines[:200])
             except Exception as e:
                 pass
+        elif ext in [".jpg", ".jpeg", ".png"]:
+            try:
+                with open(file_path, "rb") as f:
+                    img_bytes = f.read()
+                mime = "image/jpeg" if ext in [".jpg", ".jpeg"] else "image/png"
+                img_part = types.Part.from_bytes(data=img_bytes, mime_type=mime)
+                resp = self.client.models.generate_content(
+                    model="gemini-3.5-flash-lite",
+                    contents=[img_part, "Hãy đọc toàn bộ văn bản trong ảnh này, giữ nguyên đầy đủ tiêu ngữ, số ký hiệu, ngày tháng, trích yếu, nội dung và nơi nhận (Lưu: VT, PPP&QLN...)."]
+                )
+                return resp.text.strip() if resp.text else ""
+            except Exception as e:
+                sys.stderr.write(f"Image extract error: {e}\n")
         return ""
 
     def _extract_regex_metadata(self, text: str) -> dict:
@@ -184,10 +197,10 @@ class TaskAIAnalyzer:
                 
         return False
 
-    def review_submission(self, file_path: str, assignee_name: str, pending_tasks: list) -> dict:
+    def review_submission(self, file_path: str, assignee_name: str, pending_tasks: list, user_hint_text: str = "") -> dict:
         """
         Quy trình Thẩm định Sản phẩm Tự động Đa tầng (Multi-Tier Rigorous Document Review):
-        1. Kiểm tra số ID nhiệm vụ ở đầu tên file (Bắt buộc).
+        1. Kiểm tra số ID nhiệm vụ ở đầu tên file hoặc tin nhắn đi kèm hoặc đối chiếu từ khóa trích yếu.
         2. Bóc tách thể thức hành chính: Số ký hiệu, Ngày tháng, Sản phẩm (Tờ trình/Kết luận/Báo cáo/Công văn).
         3. Dò trích yếu và đối chiếu từ khóa (Keywords) dự án.
         4. TIÊU CHÍ TUYÊN QUYẾT: Dò chữ viết tắt chuyên viên tại Nơi nhận (Lưu: VT, PPP&QLN (...)).
@@ -195,10 +208,30 @@ class TaskAIAnalyzer:
         """
         filename = os.path.basename(file_path)
         hint_task_id = self.extract_task_number_from_filename(filename)
+        
+        # 1. Trích xuất text từ văn bản / OCR ảnh
         local_text = self._extract_text_fallback(file_path)
         regex_meta = self._extract_regex_metadata(local_text)
 
-        # Lỗi 1: Tên tệp không có số ID ở đầu file
+        # 2. Nếu tên file chưa có Task ID, tìm trong tin nhắn đi kèm (user_hint_text)
+        if not hint_task_id and user_hint_text:
+            m_text = re.search(r'\b(?:task|nhiệm vụ|stt|số)?\s*#?([0-9]{1,3})\b', user_hint_text, re.IGNORECASE)
+            if m_text:
+                hint_task_id = m_text.group(1)
+
+        # 3. Nếu vẫn chưa có, tự động dò từ khóa trích yếu với Bảng giao việc Google Sheets
+        if not hint_task_id and local_text:
+            for t in pending_tasks:
+                t_id = str(t.get("taskId") or t.get("task_id") or "").strip()
+                t_name = (t.get("taskName") or t.get("task_name") or "").lower()
+                clean_tname = re.sub(r'^(?:v\/v|về việc|dự án)\s*', '', t_name).strip()
+                kws = [w for w in re.split(r'[,.\s\-_/]+', clean_tname) if len(w) >= 3 and w not in ["công", "viên", "trình", "thực", "hiện", "theo", "đầu", "tư", "phương", "thức", "đối", "tác", "báo", "cáo", "nghiên", "cứu", "khả", "thi"]]
+                matches = sum(1 for kw in kws if kw in local_text.lower())
+                if matches >= 2:
+                    hint_task_id = t_id
+                    break
+
+        # Lỗi: Không xác định được số ID nhiệm vụ
         if not hint_task_id:
             return {
                 "success": True,
@@ -207,17 +240,17 @@ class TaskAIAnalyzer:
                 "deliverable": regex_meta.get("deliverable", "Văn bản"),
                 "document_number": regex_meta.get("document_number", ""),
                 "document_date": regex_meta.get("document_date", ""),
-                "actual_summary": "Chưa bóc tách do tên file sai cấu trúc",
+                "actual_summary": "Chưa bóc tách do chưa xác định được Task ID",
                 "recipient_initials": regex_meta.get("recipient_initials", ""),
                 "assigned_staff": assignee_name,
-                "ai_review_comment": "Tên tệp chưa có số thứ tự ID nhiệm vụ ở đầu file để hệ thống tự động đối soát.",
-                "discrepancy_reason": "Tên file thiếu mã số Task ID ở đầu (Ví dụ chuẩn: '1 - [Tên nhiệm vụ] - [Tên chuyên viên].pdf' hoặc '1. 7937_UBND_PKT.pdf').",
+                "ai_review_comment": "Văn bản chưa khớp được với số thứ tự Task nào trên Bảng giao việc.",
+                "discrepancy_reason": "Vui lòng đặt tên file có số Task ở đầu (Ví dụ: '4 - Ten van ban.pdf') hoặc nhắn kèm 'Nộp task [số]'.",
                 "validation_errors": [
-                    "❌ LỖI TÊN FILE: Thiếu số thứ tự ID nhiệm vụ ở đầu tên file."
+                    "❌ Không xác định được số thứ tự ID nhiệm vụ tương ứng trên Bảng giao việc."
                 ],
                 "resolution_options": [
-                    "👉 Đổi lại tên file bắt đầu bằng số thứ tự ID của nhiệm vụ (Ví dụ: '1 - Du an Tran Hung Dao - Hoa.pdf').",
-                    "👉 Nộp lại file sau khi đã đổi tên chuẩn xác."
+                    "👉 Đổi lại tên file bắt đầu bằng số thứ tự ID của nhiệm vụ (Ví dụ: '4 - Chinh trang Ma Lang - Loc.pdf').",
+                    "👉 Hoặc nhắn kèm nội dung 'task 4' khi nộp ảnh văn bản."
                 ]
             }
 
@@ -229,7 +262,7 @@ class TaskAIAnalyzer:
                 matched_task = t
                 break
 
-        assigned_staff_in_task = matched_task.get("assignee") if matched_task else assignee_name
+        assigned_staff_in_task = (matched_task.get("assignee") or matched_task.get("assigned_to")) if matched_task else assignee_name
 
         prompt = f"""
 Bạn là Trợ lý Nghiệm thu & Thẩm định Thể thức Văn bản Hành chính (Phòng Hợp tác Công tư & Quản lý Nợ - Sở Tài Chính TP.HCM).
@@ -291,11 +324,20 @@ TRẢ VỀ ĐỊNH DẠNG JSON DUY NHẤT:
   "resolution_options": ["Hướng dẫn 1", "Hướng dẫn 2"]
 }}
 """
-        models_to_try = ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-flash-lite-latest"]
+        models_to_try = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-flash-latest"]
         last_error = None
+        ext = os.path.splitext(file_path)[1].lower()
         for model_name in models_to_try:
             try:
                 contents = [prompt]
+                if ext in [".jpg", ".jpeg", ".png"]:
+                    try:
+                        with open(file_path, "rb") as f_img:
+                            img_b = f_img.read()
+                        mime = "image/jpeg" if ext in [".jpg", ".jpeg"] else "image/png"
+                        contents = [types.Part.from_bytes(data=img_b, mime_type=mime), prompt]
+                    except Exception:
+                        pass
                 resp = self.client.models.generate_content(
                     model=model_name,
                     contents=contents,
