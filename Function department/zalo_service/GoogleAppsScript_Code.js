@@ -147,6 +147,56 @@ function setupHeadersAndFormatting() {
   Logger.log("✅ Đã thiết lập hoàn tất: Dropdown 4 trạng thái, Conditional Formatting tự đổi màu, Text Wrapping và Kẻ bảng viền mỏng!");
 }
 
+/**
+ * TỰ ĐỘNG BẮT SỰ KIỆN KHI NGƯỜI DÙNG GÕ THÊM NHIỆM VỤ MỚI TRÊN GOOGLE SHEETS
+ * Tự động kẻ bảng, đóng viền mỏng, gắn dropdown trạng thái và wrap text ngay lập tức!
+ */
+function onEdit(e) {
+  try {
+    var range = e.range;
+    var sheet = range.getSheet();
+    var editedRow = range.getRow();
+    
+    // Chỉ kích hoạt cho các dòng dữ liệu từ dòng 8 trở xuống
+    if (editedRow >= 8) {
+      var rowRange = sheet.getRange(editedRow, 1, 1, 13);
+      
+      // 1. Kẻ viền mỏng công sở toàn bộ 13 cột của dòng đó
+      rowRange.setBorder(true, true, true, true, true, true, "#DADCE0", SpreadsheetApp.BorderStyle.SOLID);
+      rowRange.setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
+      rowRange.setVerticalAlignment("middle");
+      rowRange.setFontSize(10);
+      
+      // 2. Tự động gắn Dropdown 4 trạng thái nếu ô trạng thái (Cột F) chưa có
+      var statusCell = sheet.getRange(editedRow, 6);
+      if (!statusCell.getDataValidation()) {
+        var statusList = ["Chưa bắt đầu", "Đang thực hiện", "Đang sửa lại", "Đã hoàn thành"];
+        var statusRule = SpreadsheetApp.newDataValidation()
+          .requireValueInList(statusList, true)
+          .setAllowInvalid(false)
+          .build();
+        statusCell.setDataValidation(statusRule);
+      }
+      
+      // 3. Nếu mới thêm task mà chưa chọn trạng thái, mặc định là "Đang thực hiện"
+      if (!statusCell.getValue()) {
+        statusCell.setValue("Đang thực hiện");
+      }
+      
+      // 4. Căn lề chuẩn
+      sheet.getRange(editedRow, 1).setHorizontalAlignment("center");
+      sheet.getRange(editedRow, 4, 1, 3).setHorizontalAlignment("center");
+      sheet.getRange(editedRow, 9, 1, 2).setHorizontalAlignment("center");
+      sheet.getRange(editedRow, 12).setHorizontalAlignment("center");
+      
+      // Thiết lập chiều cao dòng tối thiểu 45px
+      sheet.setRowHeight(editedRow, Math.max(sheet.getRowHeight(editedRow), 45));
+    }
+  } catch (err) {
+    // Không làm gián đoạn người dùng nếu có lỗi
+  }
+}
+
 function doPost(e) {
   var lock = LockService.getScriptLock();
   try {
