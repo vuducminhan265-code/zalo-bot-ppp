@@ -456,9 +456,15 @@ def run_http_health_server():
     class HealthHandler(BaseHTTPRequestHandler):
         def do_GET(self):
             self.send_response(200)
-            self.send_header("Content-type", "text/html; charset=utf-8")
+            self.send_header("Content-type", "application/json; charset=utf-8")
             self.end_headers()
-            self.wfile.write("✅ Zalo Bot PPP Cloud Engine 24/7 is Live & Active!".encode("utf-8"))
+            info = {
+                "status": "online",
+                "service": "Zalo Bot PPP Task Master (Bot 1)",
+                "version": "2.6.0-file-audit-ok",
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+            self.wfile.write(json.dumps(info, ensure_ascii=False).encode("utf-8"))
         def log_message(self, format, *args):
             return  # Tắt spam log HTTP
 
