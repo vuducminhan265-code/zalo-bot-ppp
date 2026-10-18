@@ -216,6 +216,7 @@ class IntegratedZaloBotAgent:
                             f"💡 Đánh giá của AI: {ai_comment}",
                             "────────────────────────────",
                             f"📊 Bảng giao việc Google Sheets: {sheets_status_text}",
+                            "🔗 Tra cứu trực tiếp: https://docs.google.com/spreadsheets/d/1RRb0PJB2EJv92SPHZ3_ahv2YYEn9bxjfC8JBPpTkuG4/edit?gid=735957328",
                             "🎉 Chúc mừng đồng chí đã hoàn thành xuất sắc nhiệm vụ được giao!"
                         ]
                         return "\n".join(resp)
@@ -256,6 +257,9 @@ class IntegratedZaloBotAgent:
                         else:
                             res_items.append("• Đề nghị chuyên viên rà soát lại văn bản trước khi nộp lại hoặc báo cáo Lãnh đạo.")
 
+                        # Hướng dẫn cú pháp cụ thể để nộp lại đúng task nếu bị đối soát nhầm
+                        res_items.append("• 💡 Cú pháp nộp lại chuẩn xác: Gửi ảnh văn bản kèm theo tin nhắn ghi rõ `nộp task [số]` hoặc `task [số]` (Ví dụ: `nộp task 2` hoặc `task 2`) để hệ thống khớp đúng nhiệm vụ cần nghiệm thu.")
+
                         initials_display = recipient_initials if recipient_initials else "Không tìm thấy"
                         if assigned_staff and recipient_initials and not review_res.get("initials_match", True):
                             initials_display += f" (Khác chuyên viên phụ trách: {assigned_staff})"
@@ -278,6 +282,7 @@ class IntegratedZaloBotAgent:
                             "\n".join(res_items),
                             "────────────────────────────",
                             f"📊 Bảng giao việc Google Sheets: {sheets_warning_text}",
+                            "🔗 Tra cứu trực tiếp: https://docs.google.com/spreadsheets/d/1RRb0PJB2EJv92SPHZ3_ahv2YYEn9bxjfC8JBPpTkuG4/edit?gid=735957328",
                             "👉 Đề nghị chuyên viên chỉnh sửa hoàn thiện và nộp lại tệp văn bản."
                         ]
                         return "\n".join(resp)

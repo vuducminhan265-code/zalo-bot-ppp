@@ -121,15 +121,21 @@ class GoogleWorkspaceTaskFetcher:
         report_msg = "\n".join(lines)
 
         guide_lines = [
-            "📥 **HƯỚNG DẪN NỘP FILE TỰ ĐỘNG NGHIỆM THU:**",
-            "• **Cách nộp:** Nộp file đính kèm trực tiếp vào Zalo Group để tự động nghiệm thu.",
-            "• **Cấu trúc đặt tên tệp (Format):**",
-            "  `[Số thứ tự ID] - [Nội dung ngắn gọn] - [Tên Chuyên viên]`",
-            "  *(Lưu ý: Số thứ tự ID ở đầu tên tệp là bắt buộc để hệ thống AI tự động quét đối soát đúng Task ID, số ký hiệu, trích yếu và ngày tháng. Phần nội dung và tên chuyên viên có thể viết ngắn gọn hoặc viết tắt như Hận, hận, han, An...)*",
+            "📥 **HƯỚNG DẪN NỘP SẢN PHẨM & NGHIỆM THU TỰ ĐỘNG:**",
+            "*(Hệ thống AI tự động đối soát thể thức, số ký hiệu, trích yếu, chữ ký lưu và cập nhật trực tiếp lên Google Sheets)*",
             "",
-            "📌 **Ví dụ cụ thể:**",
-            "  1️⃣ `1 - Thẩm định phương án tài chính BOT Cầu Cần Giờ - Hận.pdf`",
-            "  2️⃣ `4 - Báo cáo rà soát ODA - An.docx`"
+            "1️⃣ **CÁCH 1: NỘP NHANH BẰNG ẢNH SCAN TRỰC TIẾP QUA ZALO (Khuyến nghị)**",
+            "• **Bước 1**: Chụp ảnh hoặc scan rõ nét trang đầu (có Quốc hiệu, Tiêu ngữ, Số ký hiệu, Trích yếu) hoặc trang cuối (có Nơi nhận / Ký tên). Có thể gửi liên tiếp nhiều trang.",
+            "• **Bước 2**: Gửi ảnh vào nhóm và kèm theo tin nhắn ghi rõ nhiệm vụ: `task [số]` hoặc `nộp task [số]` (Ví dụ: `task 2`, `nộp task 4`, `t1`).",
+            "  *(Lưu ý: Task ID trên bảng giao việc luôn được đánh số tuần tự 1, 2, 3... để chuyên viên dễ ghi nhớ và đối soát)*.",
+            "",
+            "2️⃣ **CÁCH 2: NỘP VĂN BẢN PDF CHẤT LƯỢNG CAO (Dự thảo / Báo cáo nhiều trang)**",
+            "• Do Zalo Bot API hạn chế tải tệp nhị phân PDF lớn trực tiếp qua khung chat thông thường, chuyên viên có thể áp dụng 2 cách:",
+            "  ➕ **Cách A**: Chụp 1-2 trang then chốt (Trang đầu có trích yếu + Trang cuối nơi nhận) gửi vào chat để AI nghiệm thu ngay.",
+            "  ➕ **Cách B**: Tải tệp PDF lên Thư mục Google Drive dùng chung của Phòng / Web portal nội bộ và gửi link/tên tệp vào chat kèm cú pháp `task [số] - đã tải Drive`.",
+            "",
+            "📌 **Ví dụ thao tác chuẩn:**",
+            "  👉 Gửi 2 ảnh văn bản -> Nhắn `task 2` -> Hệ thống phản hồi xác nhận và cập nhật ngay trạng thái 'Đã hoàn thành' trên Bảng giao việc!"
         ]
         guide_msg = "\n".join(guide_lines)
 

@@ -7,19 +7,19 @@ function setupHeadersAndFormatting() {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   sheet.setFrozenRows(7); // Khóa cố định từ dòng 7 trở lên
   
-  // 1. Cấu hình độ rộng từng cột chuẩn thẩm mỹ công sở
+  // 1. Cấu hình độ rộng từng cột chuẩn thẩm mỹ công sở (không quá rộng, không tràn chữ)
   var columnWidths = {
-    1: 75,   // A: Task ID
-    2: 260,  // B: Tên nhiệm vụ / Công việc
+    1: 70,   // A: Task ID
+    2: 270,  // B: Tên nhiệm vụ / Công việc
     3: 150,  // C: Người phụ trách
-    4: 120,  // D: Hạn hoàn thành
+    4: 110,  // D: Hạn hoàn thành
     5: 110,  // E: Mức độ ưu tiên
     6: 140,  // F: Trạng thái
     7: 170,  // G: Sản phẩm yêu cầu
-    8: 300,  // H: Trích yếu (Yêu cầu / Dự kiến)
+    8: 320,  // H: Trích yếu (Yêu cầu / Dự kiến)
     9: 160,  // I: Số ký hiệu văn bản
     10: 120, // J: Ngày ban hành
-    11: 300, // K: Đánh giá AI (Tóm tắt file nộp)
+    11: 320, // K: Đánh giá AI (Tóm tắt file nộp)
     12: 150, // L: Thời gian nộp
     13: 220  // M: Tên file đã nộp
   };
@@ -79,75 +79,72 @@ function setupHeadersAndFormatting() {
   headerRange.setVerticalAlignment("middle");
   sheet.setRowHeight(7, 36);
 
-  // 4. Cập nhật 4 nhiệm vụ thực tế của Phòng PPP & QLN
-  var realTasks = [
-    [
-      "1",
-      "Đề xuất nghiên cứu đầu tư 03 cảng thủy nội địa Bạch Đằng (PPP)",
-      "Phan Công Hận",
-      "2026-09-25",
-      "Gấp",
-      "Đang thực hiện",
-      "Báo cáo / Công văn (.doc / .pdf)",
-      "V/v đề xuất nghiên cứu đầu tư dự án Xây dựng 03 cảng thủy nội địa hành khách khu công viên Bạch Đằng (từ Hàm Nghi đến Ba Son) theo hình thức đối tác công tư (PPP)",
-      "", "", "", "", ""
-    ],
-    [
-      "2",
-      "Đăng ký lịch làm việc với Thanh tra Chính phủ về các dự án BT Thủ Thiêm",
-      "Phan Công Hận",
-      "2026-09-26",
-      "Gấp",
-      "Đang thực hiện",
-      "Báo cáo / Dự thảo văn bản (.pdf)",
-      "Đăng ký làm việc với Thanh tra Chính phủ về phương án thanh toán các dự án BT trong khu đô thị mới Thủ Thiêm theo Nghị định số 91/2025/NĐ-CP",
-      "", "", "", "", ""
-    ],
-    [
-      "3",
-      "Báo cáo rà soát giải ngân vốn ODA và quản lý nợ công quý III/2026",
-      "Nguyễn Thế Hòa",
-      "2026-09-24",
-      "Gấp",
-      "Đang thực hiện",
-      "Báo cáo (.docx / .pdf)",
-      "Báo cáo tình hình giải ngân nguồn vốn ODA và các khoản vay lại của chính quyền địa phương",
-      "", "", "", "", ""
-    ],
-    [
-      "4",
-      "Thẩm định phương án tài chính dự án PPP Cầu Cần Giờ",
-      "Nguyễn Thế Hòa",
-      "2026-09-28",
-      "Bình thường",
-      "Đang thực hiện",
-      "Tờ trình (.docx)",
-      "Tờ trình thẩm định báo cáo nghiên cứu khả thi dự án Đầu tư xây dựng Cầu Cần Giờ theo phương thức PPP",
-      "", "", "", "", ""
-    ]
-  ];
+  // 4. Cấu hình Dropdown Data Validation 4 trạng thái trên F8:F100
+  var statusList = ["Chưa bắt đầu", "Đang thực hiện", "Đang sửa lại", "Đã hoàn thành"];
+  var statusRule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(statusList, true)
+    .setAllowInvalid(false)
+    .build();
+  sheet.getRange("F8:F100").setDataValidation(statusRule);
 
-  for (var i = 0; i < realTasks.length; i++) {
-    var rowIdx = 8 + i;
-    sheet.getRange(rowIdx, 1, 1, 13).setValues([realTasks[i]]);
-    // Đặt màu trạng thái Đang thực hiện
-    sheet.getRange(rowIdx, 6).setBackground("#FEF7E0").setFontColor("#B06000");
-  }
+  // 5. Cấu hình Conditional Formatting (Định dạng có điều kiện tự động đổi màu khi click chọn)
+  var statusRange = sheet.getRange("F8:F100");
+  var ruleCompleted = SpreadsheetApp.newConditionalFormatRule()
+    .whenTextEqualTo("Đã hoàn thành")
+    .setBackground("#E6F4EA")
+    .setFontColor("#137333")
+    .setRanges([statusRange])
+    .build();
 
-  // 5. Căn lề và viền dữ liệu dòng 8-25
-  var dataRange = sheet.getRange("A8:M25");
+  var ruleWorking = SpreadsheetApp.newConditionalFormatRule()
+    .whenTextEqualTo("Đang thực hiện")
+    .setBackground("#FEF7E0")
+    .setFontColor("#B06000")
+    .setRanges([statusRange])
+    .build();
+
+  var ruleRevising = SpreadsheetApp.newConditionalFormatRule()
+    .whenTextEqualTo("Đang sửa lại")
+    .setBackground("#FCE8E6")
+    .setFontColor("#C5221F")
+    .setRanges([statusRange])
+    .build();
+
+  var ruleNotStarted = SpreadsheetApp.newConditionalFormatRule()
+    .whenTextEqualTo("Chưa bắt đầu")
+    .setBackground("#F1F3F4")
+    .setFontColor("#5F6368")
+    .setRanges([statusRange])
+    .build();
+
+  sheet.setConditionalFormatRules([ruleCompleted, ruleWorking, ruleRevising, ruleNotStarted]);
+
+  // 6. Căn lề, Word Wrap và Kẻ bảng chuẩn công vụ cho toàn bộ vùng dữ liệu A8:M100
+  var dataRange = sheet.getRange("A8:M100");
   dataRange.setVerticalAlignment("middle");
   dataRange.setFontSize(10);
-  dataRange.setBorder(true, true, true, true, true, true, "#E0E0E0", SpreadsheetApp.BorderStyle.SOLID);
+  dataRange.setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
+  dataRange.setBorder(true, true, true, true, true, true, "#DADCE0", SpreadsheetApp.BorderStyle.SOLID);
   
   // Căn giữa các cột mã số, ngày, trạng thái
-  sheet.getRange("A8:A25").setHorizontalAlignment("center");
-  sheet.getRange("D8:F25").setHorizontalAlignment("center");
-  sheet.getRange("I8:J25").setHorizontalAlignment("center");
-  sheet.getRange("L8:L25").setHorizontalAlignment("center");
+  sheet.getRange("A8:A100").setHorizontalAlignment("center");
+  sheet.getRange("D8:F100").setHorizontalAlignment("center");
+  sheet.getRange("I8:J100").setHorizontalAlignment("center");
+  sheet.getRange("L8:L100").setHorizontalAlignment("center");
+
+  // Căn trái các cột văn bản dài
+  sheet.getRange("B8:C100").setHorizontalAlignment("left");
+  sheet.getRange("G8:H100").setHorizontalAlignment("left");
+  sheet.getRange("K8:K100").setHorizontalAlignment("left");
+  sheet.getRange("M8:M100").setHorizontalAlignment("left");
+
+  // Thiết lập chiều cao dòng mặc định cho các dòng có dữ liệu
+  for (var r = 8; r <= 30; r++) {
+    sheet.setRowHeight(r, 45);
+  }
   
   SpreadsheetApp.flush();
-  Logger.log("Đã làm đẹp và cập nhật 4 nhiệm vụ thực tế thành công!");
+  Logger.log("✅ Đã thiết lập hoàn tất: Dropdown 4 trạng thái, Conditional Formatting tự đổi màu, Text Wrapping và Kẻ bảng viền mỏng!");
 }
 
 function doPost(e) {
@@ -156,6 +153,15 @@ function doPost(e) {
     lock.waitLock(10000);
     var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
     var postData = JSON.parse(e.postData.contents);
+    
+    // Hỗ trợ trigger format và cài đặt bảng tự động từ xa
+    if (postData.action === "formatSheet") {
+      setupHeadersAndFormatting();
+      return ContentService.createTextOutput(JSON.stringify({
+        success: true,
+        message: "Đã format và cấu hình lại Bảng giao việc Google Sheets thành công!"
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
     
     var taskId = String(postData.taskId).trim();
     var status = postData.status || "Đã hoàn thành";
