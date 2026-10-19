@@ -223,68 +223,74 @@ function setupHeadersAndFormatting() {
   } catch (errDate) {}
 
   // 5. Cấu hình Dropdown Data Validation 4 trạng thái DUY NHẤT trên Cột H (H8:H100 - Cột 8)
-  var statusList = ["Chưa bắt đầu", "Đang thực hiện", "Đang sửa lại", "Đã hoàn thành"];
-  var statusRule = SpreadsheetApp.newDataValidation()
-    .requireValueInList(statusList, true)
-    .setAllowInvalid(false)
-    .build();
-  sheet.getRange("H8:H100").setDataValidation(statusRule);
+  try {
+    var statusList = ["Chưa bắt đầu", "Đang thực hiện", "Đang sửa lại", "Đã hoàn thành"];
+    var statusRule = SpreadsheetApp.newDataValidation()
+      .requireValueInList(statusList, true)
+      .setAllowInvalid(false)
+      .build();
+    sheet.getRange("H8:H100").setDataValidation(statusRule);
+  } catch (errVal) {}
 
-  // 5. Cấu hình Conditional Formatting (Định dạng có điều kiện tự động đổi màu khi click chọn trên Cột H)
-  var statusRange = sheet.getRange("H8:H100");
-  var ruleCompleted = SpreadsheetApp.newConditionalFormatRule()
-    .whenTextEqualTo("Đã hoàn thành")
-    .setBackground("#E6F4EA")
-    .setFontColor("#137333")
-    .setRanges([statusRange])
-    .build();
+  // 6. Cấu hình Conditional Formatting (Bọc trong try-catch vì Google Tables chặn format trên typed columns)
+  try {
+    var statusRange = sheet.getRange("H8:H100");
+    var ruleCompleted = SpreadsheetApp.newConditionalFormatRule()
+      .whenTextEqualTo("Đã hoàn thành")
+      .setBackground("#E6F4EA")
+      .setFontColor("#137333")
+      .setRanges([statusRange])
+      .build();
 
-  var ruleWorking = SpreadsheetApp.newConditionalFormatRule()
-    .whenTextEqualTo("Đang thực hiện")
-    .setBackground("#FEF7E0")
-    .setFontColor("#B06000")
-    .setRanges([statusRange])
-    .build();
+    var ruleWorking = SpreadsheetApp.newConditionalFormatRule()
+      .whenTextEqualTo("Đang thực hiện")
+      .setBackground("#FEF7E0")
+      .setFontColor("#B06000")
+      .setRanges([statusRange])
+      .build();
 
-  var ruleRevising = SpreadsheetApp.newConditionalFormatRule()
-    .whenTextEqualTo("Đang sửa lại")
-    .setBackground("#FCE8E6")
-    .setFontColor("#C5221F")
-    .setRanges([statusRange])
-    .build();
+    var ruleRevising = SpreadsheetApp.newConditionalFormatRule()
+      .whenTextEqualTo("Đang sửa lại")
+      .setBackground("#FCE8E6")
+      .setFontColor("#C5221F")
+      .setRanges([statusRange])
+      .build();
 
-  var ruleNotStarted = SpreadsheetApp.newConditionalFormatRule()
-    .whenTextEqualTo("Chưa bắt đầu")
-    .setBackground("#F1F3F4")
-    .setFontColor("#5F6368")
-    .setRanges([statusRange])
-    .build();
+    var ruleNotStarted = SpreadsheetApp.newConditionalFormatRule()
+      .whenTextEqualTo("Chưa bắt đầu")
+      .setBackground("#F1F3F4")
+      .setFontColor("#5F6368")
+      .setRanges([statusRange])
+      .build();
 
-  sheet.setConditionalFormatRules([ruleCompleted, ruleWorking, ruleRevising, ruleNotStarted]);
+    sheet.setConditionalFormatRules([ruleCompleted, ruleWorking, ruleRevising, ruleNotStarted]);
+  } catch (errCond) {}
 
-  // 6. Căn lề, Word Wrap và Kẻ bảng chuẩn công vụ cho toàn bộ vùng dữ liệu A8:O100
-  var dataRange = sheet.getRange("A8:O100");
-  dataRange.setVerticalAlignment("middle");
-  dataRange.setFontSize(10);
-  dataRange.setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
-  dataRange.setBorder(true, true, true, true, true, true, "#DADCE0", SpreadsheetApp.BorderStyle.SOLID);
-  
-  // Căn giữa các cột mã số, ngày, trạng thái
-  sheet.getRange("A8:A100").setHorizontalAlignment("center");
-  sheet.getRange("F8:H100").setHorizontalAlignment("center");
-  sheet.getRange("K8:L100").setHorizontalAlignment("center");
-  sheet.getRange("N8:N100").setHorizontalAlignment("center");
+  // 7. Căn lề, Word Wrap và Kẻ bảng chuẩn công vụ cho toàn bộ vùng dữ liệu A8:O100
+  try {
+    var dataRange = sheet.getRange("A8:O100");
+    dataRange.setVerticalAlignment("middle");
+    dataRange.setFontSize(10);
+    dataRange.setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
+    dataRange.setBorder(true, true, true, true, true, true, "#DADCE0", SpreadsheetApp.BorderStyle.SOLID);
+    
+    // Căn giữa các cột mã số, ngày, trạng thái
+    sheet.getRange("A8:A100").setHorizontalAlignment("center");
+    sheet.getRange("F8:H100").setHorizontalAlignment("center");
+    sheet.getRange("K8:L100").setHorizontalAlignment("center");
+    sheet.getRange("N8:N100").setHorizontalAlignment("center");
 
-  // Căn trái các cột văn bản dài
-  sheet.getRange("B8:E100").setHorizontalAlignment("left");
-  sheet.getRange("I8:J100").setHorizontalAlignment("left");
-  sheet.getRange("M8:M100").setHorizontalAlignment("left");
-  sheet.getRange("O8:O100").setHorizontalAlignment("left");
+    // Căn trái các cột văn bản dài
+    sheet.getRange("B8:E100").setHorizontalAlignment("left");
+    sheet.getRange("I8:J100").setHorizontalAlignment("left");
+    sheet.getRange("M8:M100").setHorizontalAlignment("left");
+    sheet.getRange("O8:O100").setHorizontalAlignment("left");
 
-  // Thiết lập chiều cao dòng mặc định cho các dòng có dữ liệu
-  for (var r = 8; r <= 35; r++) {
-    sheet.setRowHeight(r, 45);
-  }
+    // Thiết lập chiều cao dòng mặc định cho các dòng có dữ liệu
+    for (var r = 8; r <= 35; r++) {
+      sheet.setRowHeight(r, 45);
+    }
+  } catch (errFormat) {}
   
   SpreadsheetApp.flush();
   Logger.log("✅ Đã thiết lập hoàn tất: Bảng 15 cột, Dropdown 4 trạng thái, Conditional Formatting tự đổi màu, Text Wrapping và Kẻ bảng viền mỏng!");
