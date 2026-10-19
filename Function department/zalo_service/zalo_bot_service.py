@@ -93,6 +93,7 @@ def add_chat_message(chat_id: str, role: str, text: str):
 USER_IMAGE_BATCH = {}
 USER_IMAGE_LOCK = threading.Lock()
 RECENT_USER_TEXTS = {} # chat_id -> {"text": str, "time": float}
+PENDING_TASK_SUBMISSIONS = {} # chat_id -> {"task_id": str, "time": float}
 
 def process_buffered_images(chat_id: str, sender_name: str, bot_key: str):
     with USER_IMAGE_LOCK:
@@ -103,8 +104,15 @@ def process_buffered_images(chat_id: str, sender_name: str, bot_key: str):
     filenames = batch.get("filenames", [])
     user_hint = batch.get("user_text", "")
     
+    # 1. Kiểm tra nếu chuyên viên đã bấm "Nộp task [số]" trước khi gửi ảnh
+    pending_sub = PENDING_TASK_SUBMISSIONS.pop(chat_id, None)
+    if pending_sub and (time.time() - pending_sub.get("time", 0)) < 300: # Trong vòng 5 phút
+        t_id = pending_sub.get("task_id")
+        if t_id and f"task {t_id}" not in user_hint.lower():
+            user_hint = f"nộp task {t_id} {user_hint}".strip()
+
     rec = RECENT_USER_TEXTS.get(chat_id)
-    if rec and (time.time() - rec.get("time", 0)) < 120:
+    if rec and (time.time() - rec.get("time", 0)) < 180:
         if not user_hint:
             user_hint = rec.get("text", "")
         else:
@@ -112,7 +120,7 @@ def process_buffered_images(chat_id: str, sender_name: str, bot_key: str):
 
     display_fn = ", ".join(filenames) if filenames else "Tập hợp ảnh văn bản"
     log_event(f"🔍 [{bot_key.upper()} BẮT ĐẦU THẨM ĐỊNH {len(files)} TRANG] '{display_fn}' từ {sender_name}")
-    send_zalo_message(chat_id, f"🤖 Đã gom đủ {len(files)} trang văn bản từ chuyên viên {sender_name}.\nĐang tổng hợp toàn bộ văn bản để đối soát thể thức và đồng bộ Bảng giao việc...", bot_key=bot_key)
+    send_zalo_message(chat_id, f"📥 Đã gom đủ {len(files)} trang ảnh văn bản từ chuyên viên {sender_name}.\nĐang tổng hợp toàn bộ văn bản để đối soát thể thức và đồng bộ Bảng giao việc...", bot_key=bot_key)
     
     try:
         review_reply = bot_agent.process_message(
@@ -494,7 +502,7 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
         send_zalo_message(chat_id, f"👋 Chào {sender_name}! Bot 1 đã nhận được tín hiệu nhưng chưa nhận diện được nội dung hoặc tệp tin hợp lệ. (Các trường: {keys_str})", bot_key=bot_key)
         return
 
-    # 1. Thẩm định tệp đính kèm (Ảnh Scan / PDF hợp lệ qua Bộ đệm đa trang)
+    # 1. Thẩm định tệp đính kèm (Ảnh Scan / PDF gửi luôn một thể)
     if downloaded_files:
         str_chat_id = str(chat_id)
         with USER_IMAGE_LOCK:
@@ -505,13 +513,6 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
                     "user_text": raw_text,
                     "timer": None
                 }
-                c_now = len(downloaded_files)
-                send_zalo_message(
-                    chat_id,
-                    f"📥 Đã tiếp nhận {c_now} trang ảnh từ chuyên viên {sender_name}.\n"
-                    f"👉 Nếu văn bản còn trang khác (trang tiêu ngữ hoặc nơi nhận/chữ ký), Anh/Chị gửi tiếp trong vòng 8 giây hoặc gõ cú pháp `nộp task [số]` (ví dụ: `nộp task 4`).",
-                    bot_key=bot_key
-                )
             else:
                 USER_IMAGE_BATCH[str_chat_id]["files"].extend(downloaded_files)
                 USER_IMAGE_BATCH[str_chat_id]["filenames"].extend(downloaded_names)
@@ -525,16 +526,10 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
                         USER_IMAGE_BATCH[str_chat_id]["timer"].cancel()
                     except Exception:
                         pass
-                c_total = len(USER_IMAGE_BATCH[str_chat_id]["files"])
-                send_zalo_message(
-                    chat_id,
-                    f"📥 Đã nhận thêm {len(downloaded_files)} trang ảnh (Tổng cộng: {c_total} trang).\n"
-                    f"⏳ Đang chờ thêm trang tiếp theo hoặc bắt đầu đối soát sau 8 giây...",
-                    bot_key=bot_key
-                )
 
-            # Bộ đệm: chờ 8.0 giây sau trang ảnh cuối cùng để chuyên viên kịp gửi ảnh tiếp theo
-            t = threading.Timer(8.0, process_buffered_images, args=(str_chat_id, sender_name, bot_key))
+            # Bộ đệm 4.0 giây: Tự động gom trọn bộ tất cả các ảnh được chuyên viên nộp cùng lúc
+            # Tuyệt đối không gửi tin nhắn lẻ đếm từng hình gây gián đoạn
+            t = threading.Timer(4.0, process_buffered_images, args=(str_chat_id, sender_name, bot_key))
             USER_IMAGE_BATCH[str_chat_id]["timer"] = t
             t.daemon = True
             t.start()
@@ -654,11 +649,12 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
         # 5.2. Nhận diện hành động CHỈ ĐỊNH NỘP BÀI (nộp task 4, nop task 4, gửi task 4, nộp 4...)
         sub_id = extract_task_submission_intent(clean_text)
         if sub_id:
+            PENDING_TASK_SUBMISSIONS[str_chat_id] = {"task_id": sub_id, "time": time.time()}
             RECENT_USER_TEXTS[str_chat_id] = {"text": raw_text, "time": time.time()}
             send_zalo_message(
                 chat_id,
-                f"📌 Đã ghi nhận chỉ định nộp bài cho Task #{sub_id} từ chuyên viên {sender_name}.\n"
-                f"👉 Mời Anh/Chị gửi ảnh scan văn bản (có thể gửi nhiều trang liên tiếp trong 8 giây), hoặc tải tệp PDF lên Google Drive rồi gõ `nộp task {sub_id} pdf` để AI đối soát và cập nhật hoàn thành trên Google Sheets!",
+                f"📌 Đã sẵn sàng tiếp nhận sản phẩm cho Task #{sub_id} từ chuyên viên {sender_name}.\n"
+                f"👉 Mời Anh/Chị chọn và gửi luôn một thể toàn bộ các hình ảnh văn bản (Trang đầu có tiêu ngữ, trích yếu và Trang cuối có nơi nhận, chữ ký) để AI thẩm định trọn bộ!",
                 bot_key=bot_key
             )
             return
