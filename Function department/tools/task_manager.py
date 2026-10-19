@@ -266,7 +266,7 @@ class TaskManager:
                             f_out.write(r_dl.content)
                         return {"success": True, "local_path": local_path, "file_name": f_name, "file_id": f_id}
                     
-                return {"success": False, "error": f"Không tìm thấy tệp PDF nào có tên bắt đầu bằng Task #{task_id} trong Thư mục Google Drive."}
+                return {"success": False, "error": f"Không tìm thấy tệp PDF nào có định dạng '{task_id} - [Tên file] - [Tên chuyên viên]' trong Thư mục Google Drive."}
         except Exception as e:
             return {"success": False, "error": f"Lỗi kết nối quét Google Drive: {e}"}
 

@@ -157,7 +157,7 @@ class GoogleWorkspaceTaskFetcher:
             "2️⃣ **CÁCH 2: NỘP VĂN BẢN PDF CHẤT LƯỢNG CAO QUA GOOGLE DRIVE**",
             "• **Bước 1**: Tải tệp PDF sản phẩm vào Thư mục Google Drive dùng chung của Phòng:",
             f"  🔗 {drive_folder_url}",
-            "• **Đặt tên tệp**: Bắt đầu bằng số Task (Ví dụ: `Task 4 - To trinh Du an Moc Bai.pdf` hoặc `4_Bao_cao_KKT.pdf`).",
+            "• **Đặt tên tệp chuẩn**: `[Số Task] - [Tên file / Loại văn bản] - [Tên chuyên viên].pdf` (Ví dụ: `4 - Tờ trình Mả Lạng - Nguyễn Trung Bảo Lộc.pdf` hoặc `4 - File - Tên chuyên viên.pdf`).",
             "• **Bước 2**: Nhắn vào chat Zalo cú pháp: `nộp task [số] pdf` (Ví dụ: `nộp task 4 pdf`).",
             "  *(AI sẽ tự động quét Google Drive, tải PDF về đối soát thể thức Nghị định 30/2020/NĐ-CP và cập nhật Bảng giao việc)*.",
             "",

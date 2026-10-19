@@ -353,9 +353,11 @@ function doPost(e) {
         var name = file.getName();
         var nameLower = name.toLowerCase();
         
+        // Nhận diện chuẩn format: "[Số Task] - [Tên file] - [Tên chuyên viên].pdf"
+        // Ví dụ: "4 - Tờ trình - Nguyễn Trung Bảo Lộc.pdf", "4 - file - tên chuyên viên.pdf", "Task 4 - To trinh.pdf"
         var isMatch = false;
-        var regex = new RegExp("^(?:task\\s*#?|t)?" + taskId + "\\b", "i");
-        if (regex.test(name) || nameLower.indexOf("task " + taskId) !== -1 || nameLower.indexOf("task_" + taskId) !== -1 || nameLower.indexOf(taskId + "_") === 0 || nameLower.indexOf(taskId + " ") === 0 || nameLower.indexOf("task" + taskId) !== -1) {
+        var regex = new RegExp("^(?:task\\s*#?|nv\\s*#?|t)?\\s*" + taskId + "\\s*([\\-_–\\s]|$)", "i");
+        if (regex.test(name) || nameLower.indexOf(taskId + " - ") === 0 || nameLower.indexOf(taskId + "-") === 0 || nameLower.indexOf(taskId + "_") === 0 || nameLower.indexOf("task " + taskId) !== -1 || nameLower.indexOf("task_" + taskId) !== -1 || nameLower.indexOf(taskId + " ") === 0) {
           isMatch = true;
         }
         

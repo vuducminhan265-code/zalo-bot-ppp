@@ -671,8 +671,10 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
                     f"• {err_drive}\n\n"
                     f"🔗 **Đường dẫn Thư mục Google Drive của Phòng:**\n"
                     f"https://drive.google.com/drive/folders/1j8C6PalsK_Z14-C88oKGy3u38OHuKRjL?usp=drive_link\n\n"
-                    f"👉 **Hướng dẫn nộp lại:**\n"
-                    f"1. Tải tệp PDF lên Thư mục Drive trên, đặt tên bắt đầu bằng Task #{pdf_task_id} (Ví dụ: `Task {pdf_task_id} - To trinh.pdf` hoặc `{pdf_task_id}_Bao_cao.pdf`).\n"
+                    f"👉 **Hướng dẫn đặt tên tệp chuẩn:**\n"
+                    f"1. Tải tệp PDF lên Thư mục Drive trên, đặt tên theo đúng định dạng:\n"
+                    f"   `{pdf_task_id} - [Tên file / Loại văn bản] - [Tên chuyên viên].pdf`\n"
+                    f"   *(Ví dụ: `{pdf_task_id} - Tờ trình Mả Lạng - Nguyễn Trung Bảo Lộc.pdf` hoặc `{pdf_task_id} - Công văn - Lộc.pdf`)*\n"
                     f"2. Nhắn lại vào nhóm: `nộp task {pdf_task_id} pdf` để AI đối soát và cập nhật hoàn thành!"
                 )
                 send_zalo_message(chat_id, fail_msg, bot_key=bot_key)
