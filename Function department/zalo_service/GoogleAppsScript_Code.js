@@ -48,6 +48,11 @@ function setupHeadersAndFormatting() {
   }
   
   // 2. Định dạng Dashboard thống kê (Dòng 4-5) trải đều toàn bộ 15 cột A -> O
+  // Hủy gộp tất cả các ô merge cũ tại Dòng 4-5 để tránh lỗi Exception: You must select all cells in a merged range
+  try {
+    sheet.getRange("A4:Z5").breakApart();
+  } catch (errBreak) {}
+
   // A4:C5 - Tổng số nhiệm vụ
   sheet.getRange("A4:C4").merge().setValue("TỔNG SỐ NHIỆM VỤ").setBackground("#E8F0FE").setFontColor("#174EA6").setFontWeight("bold").setHorizontalAlignment("center");
   sheet.getRange("A5:C5").merge().setFormula('=COUNTA(A8:A100)').setBackground("#E8F0FE").setFontColor("#174EA6").setFontSize(16).setFontWeight("bold").setHorizontalAlignment("center");
