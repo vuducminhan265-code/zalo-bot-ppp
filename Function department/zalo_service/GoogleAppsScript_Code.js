@@ -21,6 +21,9 @@
  */
 
 function alignExistingDataTo15Columns(sheet) {
+  if (!sheet) {
+    sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Task_Tracker") || SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  }
   var lastRow = sheet.getLastRow();
   if (lastRow < 8) return;
   
@@ -29,18 +32,35 @@ function alignExistingDataTo15Columns(sheet) {
   var values = dataRange.getValues();
   var modified = false;
   
+  // Danh sách từ khóa chuyên viên và sản phẩm để nhận diện chính xác hàng bị lệch 13 cột
+  var staffKeywords = ["hòa", "lộc", "giang", "phúc", "ngọc", "khoa", "thoa", "hoàng", "tú", "nam", "vũ", "phượng", "phương", "trang", "vinh", "hận"];
+  var deliverableKeywords = ["công văn", "tờ trình", "báo cáo", "kết luận", "phiếu trình", "văn bản nội bộ"];
+  
   for (var i = 0; i < values.length; i++) {
     var row = values[i];
     var taskId = String(row[0] || "").trim();
     if (!taskId) continue;
     
     // Dấu hiệu hàng đang bị lệch theo kiểu cũ 13 cột:
-    // Cột D (row[3]) chứa ngày hạn hoàn thành (Date hoặc chuỗi '2026-' / '/')
+    // 1. Cột C (row[2]) chứa tên chuyên viên
+    // 2. Cột D (row[3]) chứa ngày hạn hoàn thành (Date hoặc chuỗi '2026-' / '/')
+    // 3. Cột F (row[5]) chứa trạng thái ("Đang thực hiện", "Đã hoàn thành", "Đang sửa lại")
+    // 4. Cột G (row[6]) chứa sản phẩm ("Công văn", "Tờ trình"...)
+    var colC_val = String(row[2] || "").toLowerCase().trim();
     var colD_val = row[3];
+    var colF_val = String(row[5] || "").toLowerCase().trim();
+    var colG_val = String(row[6] || "").toLowerCase().trim();
+    
     var isOldLayout = false;
     if (colD_val instanceof Date) {
       isOldLayout = true;
     } else if (typeof colD_val === "string" && (colD_val.indexOf("202") !== -1 || colD_val.indexOf("/") !== -1)) {
+      isOldLayout = true;
+    } else if (colF_val.indexOf("thực hiện") !== -1 || colF_val.indexOf("hoàn thành") !== -1 || colF_val.indexOf("sửa lại") !== -1) {
+      isOldLayout = true;
+    } else if (staffKeywords.some(function(k) { return colC_val.indexOf(k) !== -1; })) {
+      isOldLayout = true;
+    } else if (deliverableKeywords.some(function(k) { return colG_val.indexOf(k) !== -1; })) {
       isOldLayout = true;
     }
     
@@ -59,12 +79,15 @@ function alignExistingDataTo15Columns(sheet) {
       var submittedAt = row[11];
       var fileName = row[12];
       
-      // Tự động bóc tách tên Dự án từ Task Name hoặc Trích yếu
+      // Tự động bóc tách tên Dự án chuẩn xác từ Task Name hoặc Trích yếu
       var project = "";
       var textToScan = (trichYeu || taskName || "") + "";
-      var m = textToScan.match(/(Dự\s*án(?:\s+thành\s+phần\s+\d+)?\s*[:\-\–]?\s*[^,;\.\n\r]+)/i);
+      var m = textToScan.match(/(Dự\s*án(?:\s+thành\s+phần\s+\d+)?\s*[:\-\–]?\s*[\w\s\d,–\-\(\)\/\.\+]+?)(?=\s+theo\s+phương\s+thức|\s+thuộc\s+dự\s+án|\s+tại\s+|\s+của\s+công\s+ty|\s*\(Hợp\s*đồng|$)/i);
       if (m) {
         project = m[1].trim();
+      } else {
+        var mFallback = textToScan.match(/(Dự\s*án[^\.\n\r]+)/i);
+        if (mFallback) project = mFallback[1].trim();
       }
       
       // Căn chỉnh vào đúng 15 cột mới:
@@ -560,3 +583,30 @@ function createDailyTriggers() {
     
   Logger.log("✅ Đã kích hoạt Trigger tự động phát bản tin 07:45 & 17:30 hàng ngày thành công!");
 }
+
+/**
+ * TẠO MENU TRÊN THANH CÔNG CỤ GOOGLE SHEETS
+ * Giúp người dùng click 1 phát là chạy ngay trên Google Sheets, không bao giờ cần vào Apps Script nữa!
+ */
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu("⚡ QUẢN LÝ NHIỆM VỤ")
+    .addItem("🔄 Format & Đồng Bộ 15 Cột", "setupHeadersAndFormatting")
+    .addItem("🛠️ Căn Chỉnh Dữ Liệu Bị Lệch Cột", "forceFixMisalignedColumns")
+    .addToUi();
+}
+
+/**
+ * HÀM CƯỠNG CHẾ CĂN CHỈNH DỮ LIỆU LỆCH 15 CỘT
+ */
+function forceFixMisalignedColumns() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Task_Tracker") || SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  alignExistingDataTo15Columns(sheet);
+  setupHeadersAndFormatting();
+  try {
+    SpreadsheetApp.getUi().alert("✅ Đã căn chỉnh thành công tất cả các dòng dữ liệu vào đúng 15 cột mới!");
+  } catch (e) {
+    Logger.log("Done");
+  }
+}
+
