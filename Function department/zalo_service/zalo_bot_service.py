@@ -502,11 +502,12 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
         send_zalo_message(chat_id, f"👋 Chào {sender_name}! Bot 1 đã nhận được tín hiệu nhưng chưa nhận diện được nội dung hoặc tệp tin hợp lệ. (Các trường: {keys_str})", bot_key=bot_key)
         return
 
-    # 1. Thẩm định tệp đính kèm (Ảnh Scan / PDF gửi luôn một thể)
+    # 1. Thẩm định tệp đính kèm (Hỗ trợ cả 2 cách nộp ảnh: Nộp từng ảnh rời rạc hoặc Nộp gom một thể)
     if downloaded_files:
         str_chat_id = str(chat_id)
         with USER_IMAGE_LOCK:
-            if str_chat_id not in USER_IMAGE_BATCH:
+            is_new_batch = (str_chat_id not in USER_IMAGE_BATCH)
+            if is_new_batch:
                 USER_IMAGE_BATCH[str_chat_id] = {
                     "files": list(downloaded_files),
                     "filenames": list(downloaded_names),
@@ -527,9 +528,40 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
                     except Exception:
                         pass
 
-            # Bộ đệm 4.0 giây: Tự động gom trọn bộ tất cả các ảnh được chuyên viên nộp cùng lúc
-            # Tuyệt đối không gửi tin nhắn lẻ đếm từng hình gây gián đoạn
-            t = threading.Timer(4.0, process_buffered_images, args=(str_chat_id, sender_name, bot_key))
+            total_received = len(USER_IMAGE_BATCH[str_chat_id]["files"])
+            pending_sub = PENDING_TASK_SUBMISSIONS.get(str_chat_id)
+            task_label = f" cho Task #{pending_sub['task_id']}" if pending_sub else ""
+
+            # PHÂN ĐỊNH 2 CÁCH NỘP HÌNH ẢNH:
+            if is_new_batch and len(downloaded_files) == 1:
+                # CÁCH 1A: Nộp từng ảnh rời - Báo đã nhận ảnh 1 và chờ 6 giây để chuyên viên gửi tiếp ảnh 2 (nếu có)
+                send_zalo_message(
+                    chat_id,
+                    f"📥 Đã tiếp nhận ảnh (Trang 1){task_label} từ chuyên viên {sender_name}.\n"
+                    f"⏳ Hệ thống đang đợi trong 6 giây để Anh/Chị gửi tiếp trang tiếp theo (như trang có Nơi nhận, chữ ký) nếu có...",
+                    bot_key=bot_key
+                )
+                wait_seconds = 6.0
+            elif not is_new_batch:
+                # Chuyên viên đang gửi tiếp ảnh thứ 2, 3... nối tiếp
+                send_zalo_message(
+                    chat_id,
+                    f"📥 Đã ghi nhận thêm ảnh (Trang {total_received}){task_label}.\n"
+                    f"🔄 Đang hoàn tất tổng hợp các trang để tiến hành đối soát thể thức...",
+                    bot_key=bot_key
+                )
+                wait_seconds = 3.0
+            else:
+                # CÁCH 1B: Nộp gom một thể (chuyên viên chọn gửi đồng thời nhiều ảnh trong 1 lượt)
+                send_zalo_message(
+                    chat_id,
+                    f"📥 Đã tiếp nhận trọn bộ {total_received} trang ảnh văn bản{task_label} từ chuyên viên {sender_name}.\n"
+                    f"🔄 Đang tiến hành đối soát thể thức toàn bộ các trang...",
+                    bot_key=bot_key
+                )
+                wait_seconds = 2.5
+
+            t = threading.Timer(wait_seconds, process_buffered_images, args=(str_chat_id, sender_name, bot_key))
             USER_IMAGE_BATCH[str_chat_id]["timer"] = t
             t.daemon = True
             t.start()
@@ -651,12 +683,14 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
         if sub_id:
             PENDING_TASK_SUBMISSIONS[str_chat_id] = {"task_id": sub_id, "time": time.time()}
             RECENT_USER_TEXTS[str_chat_id] = {"text": raw_text, "time": time.time()}
-            send_zalo_message(
-                chat_id,
-                f"📌 Đã sẵn sàng tiếp nhận sản phẩm cho Task #{sub_id} từ chuyên viên {sender_name}.\n"
-                f"👉 Mời Anh/Chị chọn và gửi luôn một thể toàn bộ các hình ảnh văn bản (Trang đầu có tiêu ngữ, trích yếu và Trang cuối có nơi nhận, chữ ký) để AI thẩm định trọn bộ!",
-                bot_key=bot_key
+            submission_prompt = (
+                f"📌 **Đã sẵn sàng tiếp nhận sản phẩm cho Task #{sub_id} từ chuyên viên {sender_name}:**\n\n"
+                f"👉 **Anh/Chị có thể chọn 1 trong 2 cách nộp hình ảnh sau:**\n"
+                f"• **Cách 1A (Nộp từng ảnh lẻ)**: Gửi ảnh Trang 1 (Tiêu ngữ, Số, Trích yếu) ➔ Hệ thống sẽ xác nhận và đợi 6 giây để Anh/Chị gửi tiếp Trang cuối (Nơi nhận, Chữ ký).\n"
+                f"• **Cách 1B (Nộp gom một thể)**: Chọn và gửi cùng lúc tất cả các trang ảnh văn bản (Album / Multi-select) để AI tự động gom và đối soát toàn bộ.\n\n"
+                f"*(Hoặc nộp PDF: Tải tệp lên Google Drive của Phòng rồi gõ `nộp task {sub_id} pdf`)*"
             )
+            send_zalo_message(chat_id, submission_prompt, bot_key=bot_key)
             return
 
         # 5.3. Tra cứu chi tiết một Task (task 4, xem task 4, t4, nv 4...)

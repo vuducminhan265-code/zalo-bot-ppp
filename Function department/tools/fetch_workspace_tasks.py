@@ -146,12 +146,13 @@ class GoogleWorkspaceTaskFetcher:
         drive_folder_url = "https://drive.google.com/drive/folders/1j8C6PalsK_Z14-C88oKGy3u38OHuKRjL?usp=drive_link"
         guide_lines = [
             "📥 **HƯỚNG DẪN NỘP SẢN PHẨM & NGHIỆM THU TỰ ĐỘNG:**",
-            "*(Hệ thống AI tự động đối soát thể thức, số ký hiệu, trích yếu, chữ ký lưu và cập nhật trực tiếp lên Google Sheets)*",
+            "*(Hệ thống AI tự động đối soát thể thức Nghị định 30/2020/NĐ-CP, kiểm tra Tiêu ngữ, Số ký hiệu, Trích yếu, Chữ ký lưu và cập nhật trực tiếp lên Google Sheets)*",
             "",
-            "1️⃣ **CÁCH 1: NỘP NHANH BẰNG ẢNH QUA ZALO (GỬI LUÔN MỘT THỂ TOÀN BỘ CÁC TRANG)**",
+            "1️⃣ **CÁCH 1: NỘP BẰNG HÌNH ẢNH QUA ZALO (HỖ TRỢ 2 TÙY CHỌN LINH HOẠT)**",
             "• **Bước 1**: Nhắn tin vào nhóm: `Nộp task [số]` (Ví dụ: `Nộp task 4`, `Nộp task 2`).",
-            "• **Bước 2**: Chọn và gửi luôn một thể tất cả các hình ảnh văn bản (gồm Trang đầu có Tiêu ngữ, Số ký hiệu, Trích yếu và Trang cuối có Nơi nhận, Chữ ký Lãnh đạo).",
-            "  *(Lưu ý: Hệ thống sẽ tự động gom trọn bộ ảnh gửi cùng lượt, tự phân định đâu là trang đầu, đâu là trang cuối để đối soát thể thức Nghị định 30/2020/NĐ-CP và tích 'Đã hoàn thành' trên Bảng giao việc)*.",
+            "• **Bước 2**: Chuyên viên lựa chọn 1 trong 2 hình thức gửi ảnh thuận tiện:",
+            "   🔹 **Tùy chọn 1A - Nộp từng ảnh rời (An toàn, chống sót trang)**: Gửi ảnh Trang 1 (có Tiêu ngữ, Số ký hiệu, Trích yếu) ➔ Hệ thống lập tức phản hồi đã nhận và đệm chờ 6 giây để Anh/Chị gửi tiếp Trang cuối (có Nơi nhận, Ký hiệu lưu vết, Chữ ký). Sau khi nhận đủ sẽ tự động tổng hợp đối soát.",
+            "   🔹 **Tùy chọn 1B - Nộp gom một thể (Nhanh gọn)**: Chọn và gửi cùng lúc tất cả các trang ảnh văn bản (Album / Multi-select). Hệ thống tự động gom toàn bộ ảnh nhận được trong một lượt, tự phân định đâu là trang đầu, đâu là trang cuối để thẩm định.",
             "",
             "2️⃣ **CÁCH 2: NỘP VĂN BẢN PDF CHẤT LƯỢNG CAO QUA GOOGLE DRIVE**",
             "• **Bước 1**: Tải tệp PDF sản phẩm vào Thư mục Google Drive dùng chung của Phòng:",
