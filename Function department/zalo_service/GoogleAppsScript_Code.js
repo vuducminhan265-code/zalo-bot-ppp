@@ -637,164 +637,165 @@ function forceFixMisalignedColumns() {
 }
 
 /**
- * HÀM KHÔI PHỤC VÀ ĐỒNG BỘ 100% DỮ LIỆU CHUẨN 15 CỘT
- * Giải quyết triệt để vấn đề lệch cột, sai vị trí trường dữ liệu, đè chữ Đã hoàn thành và lỗi dropdown Cột F!
+ * HÀM KHÔI PHỤC VÀ ĐỒNG BỘ 100% DỮ LIỆU CHUẨN 15 CỘT (TỰ ĐỘNG TÁI TẠO SHEET SẠCH)
+ * Giải quyết triệt để lỗi "This operation is not allowed on cells in typed columns" của Google Table!
+ * Tạo sheet mới tinh, thuần túy dải ô chuẩn, gán Date Picker cho Cột F và Dropdown 4 màu cho Cột H!
  */
 function repairAndRestoreAllTasksClean() {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Task_Tracker") || SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var oldSheet = ss.getSheetByName("Task_Tracker") || ss.getActiveSheet();
   
-  // 1. Phá bỏ mọi định dạng / merge / validation lỗi ở vùng dữ liệu cũ (A8:O30)
-  try {
-    sheet.getRange("A8:O30").clearDataValidations();
-    sheet.getRange("A8:O30").clearFormat();
-  } catch (e) {}
+  // 1. Tạo sheet mới hoàn toàn sạch (không dính Google Table Typed Columns)
+  var newSheet = ss.insertSheet("Task_Tracker_New");
+  ss.setActiveSheet(newSheet);
+  ss.moveActiveSheet(1);
+  
+  // 2. Tiêu đề hệ thống (Dòng 1-2)
+  newSheet.getRange("A1").setValue("HỆ THỐNG QUẢN LÝ TIẾN ĐỘ NHIỆM VỤ & NHẬN DIỆN NỘP FILE (ZALO BOT)")
+    .setFontWeight("bold").setFontSize(14).setFontColor("#0F4C81");
+  newSheet.getRange("A2").setValue("Dữ liệu được cập nhật tự động qua Zalo Bot tích hợp AI Gemini / Claude - Sẵn sàng đồng bộ Google Sheets")
+    .setFontStyle("italic").setFontSize(9).setFontColor("#5F6368");
+  
+  // 3. Khóa cố định từ dòng 7 trở lên
+  newSheet.setFrozenRows(7);
+  
+  // 4. Độ rộng 15 cột chuẩn
+  var columnWidths = {
+    1: 65,   // A: Task ID
+    2: 260,  // B: Tên nhiệm vụ / Công việc
+    3: 180,  // C: Dự án
+    4: 140,  // D: Người phụ trách
+    5: 140,  // E: Lãnh đạo phòng
+    6: 105,  // F: Hạn hoàn thành
+    7: 105,  // G: Mức độ ưu tiên
+    8: 130,  // H: Trạng thái
+    9: 140,  // I: Sản phẩm
+    10: 300, // J: Trích yếu
+    11: 150, // K: Số ký hiệu văn bản
+    12: 110, // L: Ngày ban hành
+    13: 300, // M: Đánh giá AI
+    14: 140, // N: Thời gian nộp
+    15: 200  // O: Tên file đã nộp
+  };
+  for (var col in columnWidths) {
+    newSheet.setColumnWidth(parseInt(col), columnWidths[col]);
+  }
+  
+  // 5. Dashboard thống kê (Dòng 4-5)
+  newSheet.getRange("A4:C4").merge().setValue("TỔNG SỐ NHIỆM VỤ").setBackground("#E8F0FE").setFontColor("#174EA6").setFontWeight("bold").setHorizontalAlignment("center");
+  newSheet.getRange("A5:C5").merge().setFormula('=COUNTA(A8:A100)').setBackground("#E8F0FE").setFontColor("#174EA6").setFontSize(16).setFontWeight("bold").setHorizontalAlignment("center");
 
-  // 2. Định dạng lại Dashboard và 15 Cột Headers chuẩn
-  setupHeadersAndFormatting();
+  newSheet.getRange("D4:F4").merge().setValue("CHƯA BẮT ĐẦU").setBackground("#F1F3F4").setFontColor("#5F6368").setFontWeight("bold").setHorizontalAlignment("center");
+  newSheet.getRange("D5:F5").merge().setFormula('=COUNTIF(H8:H100, "Chưa bắt đầu")').setBackground("#F1F3F4").setFontColor("#5F6368").setFontSize(16).setFontWeight("bold").setHorizontalAlignment("center");
 
-  // 3. Dữ liệu chuẩn xác 100% của 7 nhiệm vụ theo đúng cấu trúc 15 Cột (A -> O)
+  newSheet.getRange("G4:I4").merge().setValue("ĐANG THỰC HIỆN").setBackground("#FEF7E0").setFontColor("#B06000").setFontWeight("bold").setHorizontalAlignment("center");
+  newSheet.getRange("G5:I5").merge().setFormula('=COUNTIF(H8:H100, "Đang thực hiện")').setBackground("#FEF7E0").setFontColor("#B06000").setFontSize(16).setFontWeight("bold").setHorizontalAlignment("center");
+
+  newSheet.getRange("J4:L4").merge().setValue("ĐANG SỬA LẠI").setBackground("#FCE8E6").setFontColor("#C5221F").setFontWeight("bold").setHorizontalAlignment("center");
+  newSheet.getRange("J5:L5").merge().setFormula('=COUNTIF(H8:H100, "Đang sửa lại")').setBackground("#FCE8E6").setFontColor("#C5221F").setFontSize(16).setFontWeight("bold").setHorizontalAlignment("center");
+
+  newSheet.getRange("M4:O4").merge().setValue("ĐÃ HOÀN THÀNH").setBackground("#E6F4EA").setFontColor("#137333").setFontWeight("bold").setHorizontalAlignment("center");
+  newSheet.getRange("M5:O5").merge().setFormula('=COUNTIF(H8:H100, "Đã hoàn thành")').setBackground("#E6F4EA").setFontColor("#137333").setFontSize(16).setFontWeight("bold").setHorizontalAlignment("center");
+
+  newSheet.getRange("A4:O5").setBorder(true, true, true, true, true, true, "#DADCE0", SpreadsheetApp.BorderStyle.SOLID);
+
+  // 6. Header 15 cột (Dòng 7)
+  var headers = [
+    "Task ID", "Tên nhiệm vụ / Công việc", "Dự án", "Người phụ trách", "Lãnh đạo phòng",
+    "Hạn hoàn thành", "Mức độ ưu tiên", "Trạng thái", "Sản phẩm", "Trích yếu (Yêu cầu / Dự kiến)",
+    "Số ký hiệu văn bản", "Ngày ban hành", "Đánh giá AI (Tóm tắt file nộp)", "Thời gian nộp", "Tên file đã nộp"
+  ];
+  var hRange = newSheet.getRange(7, 1, 1, headers.length);
+  hRange.setValues([headers]);
+  hRange.setBackground("#0F4C81").setFontColor("#FFFFFF").setFontWeight("bold").setFontSize(10)
+    .setHorizontalAlignment("center").setVerticalAlignment("middle");
+  newSheet.setRowHeight(7, 36);
+
+  // 7. Nạp dữ liệu chuẩn 100% của 7 nhiệm vụ (Dòng 8 đến 14)
   var cleanTasksData = [
-    // Task 1
     [
       "1",
       "Về giao nhiệm vụ lập hồ sơ báo cáo đề xuất chủ trương đầu tư Dự án Nâng cấp, mở rộng tuyến đường Trần Hưng Đạo kết hợp xây dựng công viên, bãi tắm công cộng ven biển Phước Hải theo phương thức đối tác công tư (Hợp đồng BT) của Công ty Cổ phần Phát triển Bất động sản Phát Đạt",
-      "Dự án Bãi tắm Thùy Vân - Trần Hưng Đạo",
-      "Nguyễn Thế Hòa",
-      "Lê Hoàng",
-      "2026-10-31",
-      "Gấp",
-      "Đang thực hiện",
-      "Công văn",
+      "Dự án Bãi tắm Thùy Vân - Trần Hưng Đạo", "Nguyễn Thế Hòa", "Lê Hoàng",
+      "2026-10-31", "Gấp", "Đang thực hiện", "Công văn",
       "V/v giao nhiệm vụ lập hồ sơ báo cáo đề xuất chủ trương đầu tư Dự án Nâng cấp, mở rộng tuyến đường Trần Hưng Đạo",
-      "",
-      "",
-      "",
-      "",
-      ""
+      "", "", "", "", ""
     ],
-    // Task 2
     [
       "2",
       "V/v giao nhiệm vụ lập hồ sơ báo cáo đề xuất chủ trương đầu tư Dự án Nâng cấp, mở rộng tuyến đường Trần Hưng Đạo kết hợp xây dựng công viên, bãi tắm công cộng ven biển Phước Hải theo phương thức đối tác công tư (Hợp đồng BT) của Công ty Cổ phần Phát triển Bất động sản Phát Đạt",
-      "Dự án 247 Trần Hưng Đạo",
-      "Nguyễn Thế Hòa",
-      "Lê Hoàng",
-      "2026-10-31",
-      "Gấp",
-      "Đang thực hiện",
-      "Công văn",
+      "Dự án 247 Trần Hưng Đạo", "Nguyễn Thế Hòa", "Lê Hoàng",
+      "2026-10-31", "Gấp", "Đang thực hiện", "Công văn",
       "Có ý kiến việc giao thực hiện dự án theo hình thức BT",
-      "",
-      "",
-      "",
-      "",
-      ""
+      "", "", "", "", ""
     ],
-    // Task 3
     [
       "3",
       "V/v giao nhiệm vụ lập hồ sơ báo cáo đề xuất chủ trương đầu tư Dự án Nâng cấp, mở rộng tuyến đường Trần Hưng Đạo kết hợp xây dựng công viên, bãi tắm công cộng ven biển Phước Hải theo phương thức đối tác công tư (Hợp đồng BT) của Công ty Cổ phần Phát triển Bất động sản Phát Đạt.",
-      "Dự án Phước Hải - Phát Đạt",
-      "Nguyễn Thế Hòa",
-      "Lê Hoàng",
-      "2026-10-31",
-      "Gấp",
-      "Đang thực hiện",
-      "Công văn",
+      "Dự án Phước Hải - Phát Đạt", "Nguyễn Thế Hòa", "Lê Hoàng",
+      "2026-10-31", "Gấp", "Đang thực hiện", "Công văn",
       "27239 STC-PPPQLN",
-      "",
-      "",
-      "",
-      "",
-      ""
+      "", "", "", "", ""
     ],
-    // Task 4
     [
       "4",
       "Dự án Chỉnh trang đô thị Khu Mả Lạng và Chợ Gà - Gạo trên địa bàn phường Cầu Ông Lãnh và phường Bến Thành, Thành phố Hồ Chí Minh theo phương thức đối tác công tư (Hợp đồng BT)",
-      "Dự án Chỉnh trang Khu Mả Lạng và Chợ Gà - Gạo",
-      "Nguyễn Trung Bảo Lộc",
-      "Lê Hoàng",
-      "2026-10-31",
-      "Gấp",
-      "Đã hoàn thành",
-      "Công văn",
+      "Dự án Chỉnh trang Khu Mả Lạng và Chợ Gà - Gạo", "Nguyễn Trung Bảo Lộc", "Lê Hoàng",
+      "2026-10-31", "Gấp", "Đã hoàn thành", "Công văn",
       "V/v ý kiến đối với Báo cáo nghiên cứu khả thi điều chỉnh Dự án Chỉnh trang đô thị Khu Mả Lạng và Chợ Gà – Gạo",
-      "24586/STC-PPP&QLN",
-      "2026-10-19",
+      "24586/STC-PPP&QLN", "2026-10-19",
       "Đã thẩm định đạt chuẩn Nghị định 30/2020/NĐ-CP (Khớp chuyên viên: Nguyễn Trung Bảo Lộc)",
-      "2026-10-19 15:30:00",
-      "4 - 24586 STC PPP.signed - Lộc.pdf"
+      "2026-10-19 15:30:00", "4 - 24586 STC PPP.signed - Lộc.pdf"
     ],
-    // Task 5
     [
       "5",
       "dự án thành phần 3: Bồi thường, hỗ trợ, tái định cư cao tốc Thành phố Hồ Chí Minh - Mộc Bài đoạn qua Thành phố Hồ Chí Minh thuộc dự án đầu tư xây dựng đường cao tốc Thành phố Hồ Chí Minh - Mộc Bài (giai đoạn 1)",
-      "Dự án Cao tốc TP.HCM - Mộc Bài",
-      "Hoàng Thị Hương Giang",
-      "Lê Hoàng",
-      "2026-10-31",
-      "Gấp",
-      "Đang thực hiện",
-      "Công văn",
+      "Dự án Cao tốc TP.HCM - Mộc Bài", "Hoàng Thị Hương Giang", "Lê Hoàng",
+      "2026-10-31", "Gấp", "Đang thực hiện", "Công văn",
       "V/v ý kiến đối với Báo cáo nghiên cứu khả thi điều chỉnh dự án thành phần 3: Bồi thường, hỗ trợ, tái định cư cao tốc Thành phố Hồ Chí Minh – Mộc Bài",
-      "",
-      "",
-      "",
-      "",
-      ""
+      "", "", "", "", ""
     ],
-    // Task 6
     [
       "6",
       "Về thành lập Hội đồng thẩm định báo cáo nghiên cứu khả thi Dự án Khu liên hợp thể dục thể thao quốc gia Rạch Chiếc",
-      "Dự án Khu liên hợp TDTT Rạch Chiếc",
-      "Nguyễn Thế Hòa",
-      "Lê Hoàng",
-      "2026-10-31",
-      "Gấp",
-      "Đang thực hiện",
-      "Công văn",
+      "Dự án Khu liên hợp TDTT Rạch Chiếc", "Nguyễn Thế Hòa", "Lê Hoàng",
+      "2026-10-31", "Gấp", "Đang thực hiện", "Công văn",
       "Về thành lập Hội đồng thẩm định báo cáo nghiên cứu khả thi",
-      "",
-      "",
-      "",
-      "",
-      ""
+      "", "", "", "", ""
     ],
-    // Task 7
     [
       "7",
       "Thẩm định Báo cáo nghiên cứu khả thi đầu tư xây dựng Dự án Khu liên hợp thể dục thể thao quốc gia Rạch Chiếc theo phương thức đối tác công tư (PPP) Hạng mục hạ tầng kỹ thuật toàn khu",
-      "Dự án Hạ tầng kỹ thuật Rạch Chiếc",
-      "Nguyễn Thế Hòa",
-      "Lê Hoàng",
-      "2026-10-31",
-      "Gấp",
-      "Đang thực hiện",
-      "Tờ trình",
+      "Dự án Hạ tầng kỹ thuật Rạch Chiếc", "Nguyễn Thế Hòa", "Lê Hoàng",
+      "2026-10-31", "Gấp", "Đang thực hiện", "Tờ trình",
       "Thẩm định Báo cáo nghiên cứu khả thi đầu tư xây dựng Dự án Khu liên hợp thể dục thể thao quốc gia Rạch Chiếc Hạng mục hạ tầng kỹ thuật toàn khu",
-      "",
-      "",
-      "",
-      "",
-      ""
+      "", "", "", "", ""
     ]
   ];
 
-  // Ghi đè chính xác 7 hàng từ dòng 8 đến dòng 14, từ cột 1 (A) đến cột 15 (O)
-  sheet.getRange(8, 1, cleanTasksData.length, 15).setValues(cleanTasksData);
+  newSheet.getRange(8, 1, cleanTasksData.length, 15).setValues(cleanTasksData);
 
-  // Xóa sạch các ô rác phía dưới (từ dòng 15 đến 30) nếu có
-  try {
-    sheet.getRange(15, 1, 16, 15).clearContent();
-  } catch (eClean) {}
+  // 8. Cài đặt Data Validation sạch sẽ (KHÔNG CÒN BỊ TABLE CHẶN):
+  // Cột F (Hạn hoàn thành): Date Picker thuần túy
+  var dateRule = SpreadsheetApp.newDataValidation()
+    .requireDate()
+    .setAllowInvalid(true)
+    .build();
+  newSheet.getRange("F8:F100").setDataValidation(dateRule);
 
-  // Tô màu trạng thái chuẩn cho Cột H (Cột 8)
+  // Cột H (Trạng thái): Dropdown 4 trạng thái chuẩn có mũi tên ▼ ở mọi dòng
+  var statusList = ["Chưa bắt đầu", "Đang thực hiện", "Đang sửa lại", "Đã hoàn thành"];
+  var statusRule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(statusList, true)
+    .setAllowInvalid(false)
+    .build();
+  newSheet.getRange("H8:H100").setDataValidation(statusRule);
+
+  // 9. Tô màu trực quan cho trạng thái từng dòng
   for (var r = 0; r < cleanTasksData.length; r++) {
     var rowNum = 8 + r;
     var st = cleanTasksData[r][7];
-    var cell = sheet.getRange(rowNum, 8);
+    var cell = newSheet.getRange(rowNum, 8);
     if (st === "Đã hoàn thành") {
       cell.setBackground("#E6F4EA").setFontColor("#137333").setFontWeight("bold");
     } else if (st === "Đang thực hiện") {
@@ -804,48 +805,29 @@ function repairAndRestoreAllTasksClean() {
     }
   }
 
-  // Cài đặt Data Validation chuẩn:
-  // Cột F (Hạn hoàn thành): Date Picker chuẩn ngày
+  // 10. Đóng khung, canh lề chuẩn
+  var dRange = newSheet.getRange("A8:O100");
+  dRange.setBorder(true, true, true, true, true, true, "#DADCE0", SpreadsheetApp.BorderStyle.SOLID);
+  dRange.setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
+  dRange.setVerticalAlignment("middle");
+  dRange.setFontSize(10);
+
+  newSheet.getRange("A8:A100").setHorizontalAlignment("center");
+  newSheet.getRange("E8:G100").setHorizontalAlignment("center");
+  newSheet.getRange("H8:I100").setHorizontalAlignment("center");
+  newSheet.getRange("K8:L100").setHorizontalAlignment("center");
+  newSheet.getRange("N8:N100").setHorizontalAlignment("center");
+
+  // 11. Đổi tên sheet cũ thành Task_Tracker_Backup và newSheet thành Task_Tracker chính thức
   try {
-    sheet.getRange("F8:F14").clearDataValidations();
-    var dateRule = SpreadsheetApp.newDataValidation()
-      .requireDate()
-      .setAllowInvalid(true)
-      .build();
-    sheet.getRange("F8:F14").setDataValidation(dateRule);
-  } catch (eF) {
-    Logger.log("Notice F: " + eF);
-  }
-
-  // Cột H (Trạng thái): Dropdown 4 trạng thái công vụ
-  try {
-    sheet.getRange("H8:H14").clearDataValidations();
-    var statusList = ["Chưa bắt đầu", "Đang thực hiện", "Đang sửa lại", "Đã hoàn thành"];
-    var statusRule = SpreadsheetApp.newDataValidation()
-      .requireValueInList(statusList, true)
-      .setAllowInvalid(false)
-      .build();
-    sheet.getRange("H8:H14").setDataValidation(statusRule);
-  } catch (eH) {
-    Logger.log("Notice H: " + eH);
-  }
-
-  // Căn lề, đóng khung và wrap text toàn bộ bảng
-  var dataRange = sheet.getRange(8, 1, cleanTasksData.length, 15);
-  dataRange.setBorder(true, true, true, true, true, true, "#DADCE0", SpreadsheetApp.BorderStyle.SOLID);
-  dataRange.setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
-  dataRange.setVerticalAlignment("middle");
-  dataRange.setFontSize(10);
-
-  // Căn giữa các cột mã số, ngày, trạng thái
-  sheet.getRange("A8:A14").setHorizontalAlignment("center");
-  sheet.getRange("E8:G14").setHorizontalAlignment("center");
-  sheet.getRange("H8:I14").setHorizontalAlignment("center");
-  sheet.getRange("K8:L14").setHorizontalAlignment("center");
-  sheet.getRange("N8:N14").setHorizontalAlignment("center");
+    if (oldSheet && oldSheet.getName() === "Task_Tracker") {
+      oldSheet.setName("Task_Tracker_Backup");
+    }
+  } catch (eRen) {}
+  newSheet.setName("Task_Tracker");
 
   try {
-    SpreadsheetApp.getUi().alert("🎉 ĐÃ KHÔI PHỤC VÀ CĂN CHỈNH 100% DỮ LIỆU CHUẨN 15 CỘT THÀNH CÔNG!");
+    SpreadsheetApp.getUi().alert("🎉 ĐÃ KHÔI PHỤC VÀ TÁI TẠO BẢNG TÍNH MỚI 100% THÀNH CÔNG!\nCột F đã là Date Picker chuẩn.\nCột H đã có Dropdown 4 trạng thái hoàn hảo!");
   } catch (e) {
     Logger.log("Restored successfully!");
   }
