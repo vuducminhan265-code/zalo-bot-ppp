@@ -207,17 +207,20 @@ function setupHeadersAndFormatting() {
   sheet.setRowHeight(7, 36);
 
   // 4. Xóa sạch toàn bộ Data Validation cũ bị sót lại trên các cột khác (đặc biệt là Cột F Hạn hoàn thành)
-  sheet.getRange("A8:G100").clearDataValidations();
-  sheet.getRange("I8:O100").clearDataValidations();
+  try {
+    sheet.getRange("A8:G100").clearDataValidations();
+    sheet.getRange("I8:O100").clearDataValidations();
+  } catch (errClear) {}
 
   // Định dạng chuẩn Date Picker sạch sẽ cho Cột F (Hạn hoàn thành - Cột 6)
-  var deadlineRange = sheet.getRange("F8:F100");
-  deadlineRange.setNumberFormat("yyyy-mm-dd");
-  var dateRule = SpreadsheetApp.newDataValidation()
-    .requireDate()
-    .setAllowInvalid(true)
-    .build();
-  deadlineRange.setDataValidation(dateRule);
+  try {
+    var deadlineRange = sheet.getRange("F8:F100");
+    var dateRule = SpreadsheetApp.newDataValidation()
+      .requireDate()
+      .setAllowInvalid(true)
+      .build();
+    deadlineRange.setDataValidation(dateRule);
+  } catch (errDate) {}
 
   // 5. Cấu hình Dropdown Data Validation 4 trạng thái DUY NHẤT trên Cột H (H8:H100 - Cột 8)
   var statusList = ["Chưa bắt đầu", "Đang thực hiện", "Đang sửa lại", "Đã hoàn thành"];
@@ -626,17 +629,20 @@ function forceFixMisalignedColumns() {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Task_Tracker") || SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   
   // 1. Xóa triệt để dropdown trạng thái bị gán nhầm trên Cột F (Hạn hoàn thành)
-  sheet.getRange("A8:G100").clearDataValidations();
-  sheet.getRange("I8:O100").clearDataValidations();
+  try {
+    sheet.getRange("A8:G100").clearDataValidations();
+    sheet.getRange("I8:O100").clearDataValidations();
+  } catch (errClear) {}
   
   // 2. Định dạng Date Picker sạch sẽ cho Cột F
-  var deadlineRange = sheet.getRange("F8:F100");
-  deadlineRange.setNumberFormat("yyyy-mm-dd");
-  var dateRule = SpreadsheetApp.newDataValidation()
-    .requireDate()
-    .setAllowInvalid(true)
-    .build();
-  deadlineRange.setDataValidation(dateRule);
+  try {
+    var deadlineRange = sheet.getRange("F8:F100");
+    var dateRule = SpreadsheetApp.newDataValidation()
+      .requireDate()
+      .setAllowInvalid(true)
+      .build();
+    deadlineRange.setDataValidation(dateRule);
+  } catch (errDate) {}
 
   // 3. Căn chỉnh dữ liệu và cập nhật toàn bộ format chuẩn
   alignExistingDataTo15Columns(sheet);

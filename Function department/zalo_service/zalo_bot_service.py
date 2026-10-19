@@ -672,9 +672,10 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
                     f"🔗 **Đường dẫn Thư mục Google Drive của Phòng:**\n"
                     f"https://drive.google.com/drive/folders/1j8C6PalsK_Z14-C88oKGy3u38OHuKRjL?usp=drive_link\n\n"
                     f"👉 **Hướng dẫn đặt tên tệp chuẩn:**\n"
-                    f"1. Tải tệp PDF lên Thư mục Drive trên, đặt tên theo đúng định dạng:\n"
+                    f"1. Tải tệp PDF lên Thư mục Drive trên, đặt tên theo cấu trúc:\n"
                     f"   `{pdf_task_id} - [Tên file / Loại văn bản] - [Tên chuyên viên].pdf`\n"
-                    f"   *(Ví dụ: `{pdf_task_id} - Tờ trình Mả Lạng - Nguyễn Trung Bảo Lộc.pdf` hoặc `{pdf_task_id} - Công văn - Lộc.pdf`)*\n"
+                    f"   *(Lưu ý: Tên chuyên viên chỉ cần ghi ngắn gọn như: Lộc, Hòa, Giang, Phúc... không cần họ tên đầy đủ rườm rà. Quan trọng nhất là số `{pdf_task_id}` ở đầu tiên khớp với ID Task cần nộp)*.\n"
+                    f"   *Ví dụ: `{pdf_task_id} - To trinh - Loc.pdf` hoặc `{pdf_task_id} - File - Tên chuyên viên.pdf` hoặc `{pdf_task_id} - Công văn - Lộc.pdf`*\n"
                     f"2. Nhắn lại vào nhóm: `nộp task {pdf_task_id} pdf` để AI đối soát và cập nhật hoàn thành!"
                 )
                 send_zalo_message(chat_id, fail_msg, bot_key=bot_key)
@@ -690,7 +691,7 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
                 f"👉 **Anh/Chị có thể chọn 1 trong 2 cách nộp hình ảnh sau:**\n"
                 f"• **Cách 1A (Nộp từng ảnh lẻ)**: Gửi ảnh Trang 1 (Tiêu ngữ, Số, Trích yếu) ➔ Hệ thống sẽ xác nhận và đợi 6 giây để Anh/Chị gửi tiếp Trang cuối (Nơi nhận, Chữ ký).\n"
                 f"• **Cách 1B (Nộp gom một thể)**: Chọn và gửi cùng lúc tất cả các trang ảnh văn bản (Album / Multi-select) để AI tự động gom và đối soát toàn bộ.\n\n"
-                f"*(Hoặc nộp PDF: Tải tệp lên Google Drive của Phòng rồi gõ `nộp task {sub_id} pdf`)*"
+                f"*(Hoặc nộp PDF: Tải tệp lên Google Drive đặt tên `{sub_id} - [Tên file] - [Tên chuyên viên ngắn gọn].pdf` rồi gõ `nộp task {sub_id} pdf`)*"
             )
             send_zalo_message(chat_id, submission_prompt, bot_key=bot_key)
             return

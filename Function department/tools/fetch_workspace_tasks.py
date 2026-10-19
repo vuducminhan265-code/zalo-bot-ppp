@@ -157,9 +157,11 @@ class GoogleWorkspaceTaskFetcher:
             "2️⃣ **CÁCH 2: NỘP VĂN BẢN PDF CHẤT LƯỢNG CAO QUA GOOGLE DRIVE**",
             "• **Bước 1**: Tải tệp PDF sản phẩm vào Thư mục Google Drive dùng chung của Phòng:",
             f"  🔗 {drive_folder_url}",
-            "• **Đặt tên tệp chuẩn**: `[Số Task] - [Tên file / Loại văn bản] - [Tên chuyên viên].pdf` (Ví dụ: `4 - Tờ trình Mả Lạng - Nguyễn Trung Bảo Lộc.pdf` hoặc `4 - File - Tên chuyên viên.pdf`).",
+            "• **Đặt tên tệp chuẩn**: `[Số ID Task] - [Tên file / Loại văn bản] - [Tên chuyên viên].pdf`",
+            "  *(Lưu ý: Tên chuyên viên có thể ghi ngắn gọn như: Lộc, Hòa, Giang, Phúc... không cần họ tên đầy đủ rườm rà; quan trọng nhất là SỐ ĐẦU TIÊN phải khớp đúng với ID Task cần nộp)*.",
+            "  *Ví dụ: `4 - To trinh - Loc.pdf` hoặc `4 - File - Tên chuyên viên.pdf` hoặc `4 - Công văn - Lộc.pdf`*.",
             "• **Bước 2**: Nhắn vào chat Zalo cú pháp: `nộp task [số] pdf` (Ví dụ: `nộp task 4 pdf`).",
-            "  *(AI sẽ tự động quét Google Drive, tải PDF về đối soát thể thức Nghị định 30/2020/NĐ-CP và cập nhật Bảng giao việc)*.",
+            "  *(AI sẽ tự động quét Google Drive tìm đúng tệp có số ID tương ứng, tải PDF về đối soát thể thức Nghị định 30/2020/NĐ-CP và cập nhật Bảng giao việc)*.",
             "",
             "📌 **Tra cứu nhanh nhiệm vụ:**",
             "  👉 Gõ `task [số]` (Ví dụ: `task 4` hoặc `xem task 4`) để xem đầy đủ thông tin nhiệm vụ, dự án, hạn hoàn thành và kết quả thẩm định."
