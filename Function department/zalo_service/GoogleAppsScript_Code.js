@@ -802,6 +802,30 @@ function repairAndRestoreAllTasksClean() {
     } else if (st === "Đang sửa lại") {
       cell.setBackground("#FCE8E6").setFontColor("#C5221F").setFontWeight("bold");
     }
+  // Cài đặt Data Validation chuẩn:
+  // Cột F (Hạn hoàn thành): Date Picker chuẩn ngày
+  try {
+    sheet.getRange("F8:F14").clearDataValidations();
+    var dateRule = SpreadsheetApp.newDataValidation()
+      .requireDate()
+      .setAllowInvalid(true)
+      .build();
+    sheet.getRange("F8:F14").setDataValidation(dateRule);
+  } catch (eF) {
+    Logger.log("Notice F: " + eF);
+  }
+
+  // Cột H (Trạng thái): Dropdown 4 trạng thái công vụ
+  try {
+    sheet.getRange("H8:H14").clearDataValidations();
+    var statusList = ["Chưa bắt đầu", "Đang thực hiện", "Đang sửa lại", "Đã hoàn thành"];
+    var statusRule = SpreadsheetApp.newDataValidation()
+      .requireValueInList(statusList, true)
+      .setAllowInvalid(false)
+      .build();
+    sheet.getRange("H8:H14").setDataValidation(statusRule);
+  } catch (eH) {
+    Logger.log("Notice H: " + eH);
   }
 
   // Căn lề, đóng khung và wrap text toàn bộ bảng
