@@ -197,7 +197,8 @@ class IntegratedZaloBotAgent:
                                     doc_number=doc_number,
                                     doc_date=doc_date,
                                     actual_summary=actual_summary,
-                                    deliverable=deliverable
+                                    deliverable=deliverable,
+                                    project=review_res.get("project_name", "")
                                 )
                             except Exception as e:
                                 print(f"⚠️ Lỗi update Google Sheets: {e}", flush=True)
@@ -221,7 +222,8 @@ class IntegratedZaloBotAgent:
                             f"💡 Đánh giá của AI: {ai_comment}",
                             "────────────────────────────",
                             f"📊 Bảng giao việc Google Sheets: {sheets_status_text}",
-                            "🔗 Tra cứu trực tiếp: https://docs.google.com/spreadsheets/d/1RRb0PJB2EJv92SPHZ3_ahv2YYEn9bxjfC8JBPpTkuG4/edit?gid=735957328",
+                            "🔗 Link tra cứu trực tiếp:",
+                            "https://docs.google.com/spreadsheets/d/1RRb0PJB2EJv92SPHZ3_ahv2YYEn9bxjfC8JBPpTkuG4/edit?gid=735957328",
                             "🎉 Chúc mừng đồng chí đã hoàn thành xuất sắc nhiệm vụ được giao!"
                         ])
                         return "\n".join(resp)
@@ -239,7 +241,8 @@ class IntegratedZaloBotAgent:
                                     doc_number=doc_number,
                                     doc_date=doc_date,
                                     actual_summary=actual_summary,
-                                    deliverable=deliverable
+                                    deliverable=deliverable,
+                                    project=review_res.get("project_name", "")
                                 )
                             except Exception as e:
                                 print(f"⚠️ Lỗi update Google Sheets: {e}", flush=True)
@@ -292,7 +295,8 @@ class IntegratedZaloBotAgent:
                             "\n".join(res_items),
                             "────────────────────────────",
                             f"📊 Bảng giao việc Google Sheets: {sheets_warning_text}",
-                            "🔗 Tra cứu trực tiếp: https://docs.google.com/spreadsheets/d/1RRb0PJB2EJv92SPHZ3_ahv2YYEn9bxjfC8JBPpTkuG4/edit?gid=735957328",
+                            "🔗 Link tra cứu trực tiếp:",
+                            "https://docs.google.com/spreadsheets/d/1RRb0PJB2EJv92SPHZ3_ahv2YYEn9bxjfC8JBPpTkuG4/edit?gid=735957328",
                             "👉 Đề nghị chuyên viên chỉnh sửa hoàn thiện và nộp lại tệp văn bản."
                         ])
                         return "\n".join(resp)

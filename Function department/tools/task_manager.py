@@ -25,7 +25,7 @@ class TaskManager:
         self.webhook_url = webhook_url or WEBHOOK_URL or DEFAULT_WEBHOOK_URL
 
     def get_all_tasks_from_sheet(self) -> list:
-        """Đọc tức thì toàn bộ 13 cột từ Google Sheets (gid=735957328)."""
+        """Đọc tức thì dữ liệu từ Google Sheets, tự động thích ứng cấu trúc 13 cột hoặc 15 cột."""
         try:
             req = urllib.request.Request(CSV_EXPORT_URL, headers={"User-Agent": "Mozilla/5.0"})
             with urllib.request.urlopen(req, timeout=10) as resp:
@@ -34,24 +34,58 @@ class TaskManager:
                 rows = list(reader)
                 
                 tasks = []
-                for i in range(7, len(rows)):
-                    row = rows[i]
-                    if len(row) > 0 and row[0].strip():
-                        tasks.append({
-                            "taskId": row[0].strip(),
-                            "taskName": row[1].strip() if len(row) > 1 else "",
-                            "assignee": row[2].strip() if len(row) > 2 else "Chưa gán",
-                            "deadline": row[3].strip() if len(row) > 3 else "",
-                            "priority": row[4].strip() if len(row) > 4 else "Bình thường",
-                            "status": row[5].strip() if len(row) > 5 else "Chưa bắt đầu",
-                            "deliverable": row[6].strip() if len(row) > 6 else "",
-                            "trichYeu": row[7].strip() if len(row) > 7 else "",
-                            "soKyHieu": row[8].strip() if len(row) > 8 else "",
-                            "ngayBanHanh": row[9].strip() if len(row) > 9 else "",
-                            "aiSummary": row[10].strip() if len(row) > 10 else "",
-                            "submittedAt": row[11].strip() if len(row) > 11 else "",
-                            "fileName": row[12].strip() if len(row) > 12 else ""
-                        })
+                if len(rows) > 6:
+                    header_row = [c.strip().lower() for c in rows[6]]
+                    has_project_col = "dự án" in header_row or (len(header_row) > 2 and "dự án" in header_row[2])
+                    
+                    for i in range(7, len(rows)):
+                        row = rows[i]
+                        if len(row) > 0 and row[0].strip():
+                            if has_project_col:
+                                # Cấu trúc mới 15 cột:
+                                # 0: Task ID | 1: Tên nhiệm vụ | 2: Dự án | 3: Người phụ trách | 4: Lãnh đạo phòng
+                                # 5: Hạn hoàn thành | 6: Mức độ ưu tiên | 7: Trạng thái | 8: Sản phẩm
+                                # 9: Trích yếu | 10: Số ký hiệu | 11: Ngày ban hành | 12: Đánh giá AI
+                                # 13: Thời gian nộp | 14: Tên file
+                                tasks.append({
+                                    "taskId": row[0].strip(),
+                                    "taskName": row[1].strip() if len(row) > 1 else "",
+                                    "project": row[2].strip() if len(row) > 2 else "",
+                                    "assignee": row[3].strip() if len(row) > 3 else "Chưa gán",
+                                    "leader": row[4].strip() if len(row) > 4 else "",
+                                    "deadline": row[5].strip() if len(row) > 5 else "",
+                                    "priority": row[6].strip() if len(row) > 6 else "Bình thường",
+                                    "status": row[7].strip() if len(row) > 7 else "Chưa bắt đầu",
+                                    "deliverable": row[8].strip() if len(row) > 8 else "",
+                                    "trichYeu": row[9].strip() if len(row) > 9 else "",
+                                    "soKyHieu": row[10].strip() if len(row) > 10 else "",
+                                    "ngayBanHanh": row[11].strip() if len(row) > 11 else "",
+                                    "aiSummary": row[12].strip() if len(row) > 12 else "",
+                                    "submittedAt": row[13].strip() if len(row) > 13 else "",
+                                    "fileName": row[14].strip() if len(row) > 14 else ""
+                                })
+                            else:
+                                # Cấu trúc cũ 13 cột:
+                                # 0: Task ID | 1: Tên nhiệm vụ | 2: Người phụ trách | 3: Hạn hoàn thành
+                                # 4: Mức độ ưu tiên | 5: Trạng thái | 6: Sản phẩm | 7: Trích yếu
+                                # 8: Số ký hiệu | 9: Ngày ban hành | 10: Đánh giá AI | 11: Thời gian nộp | 12: Tên file
+                                tasks.append({
+                                    "taskId": row[0].strip(),
+                                    "taskName": row[1].strip() if len(row) > 1 else "",
+                                    "project": "",
+                                    "assignee": row[2].strip() if len(row) > 2 else "Chưa gán",
+                                    "leader": "",
+                                    "deadline": row[3].strip() if len(row) > 3 else "",
+                                    "priority": row[4].strip() if len(row) > 4 else "Bình thường",
+                                    "status": row[5].strip() if len(row) > 5 else "Chưa bắt đầu",
+                                    "deliverable": row[6].strip() if len(row) > 6 else "",
+                                    "trichYeu": row[7].strip() if len(row) > 7 else "",
+                                    "soKyHieu": row[8].strip() if len(row) > 8 else "",
+                                    "ngayBanHanh": row[9].strip() if len(row) > 9 else "",
+                                    "aiSummary": row[10].strip() if len(row) > 10 else "",
+                                    "submittedAt": row[11].strip() if len(row) > 11 else "",
+                                    "fileName": row[12].strip() if len(row) > 12 else ""
+                                })
                 return tasks
         except Exception as e:
             sys.stderr.write(f"[CẢNH BÁO] Không thể đọc Google Sheets: {e}. Chuyển sang đọc file local.\n")
@@ -150,11 +184,11 @@ class TaskManager:
                     })
         return pending
 
-    def update_task_status_and_metadata(self, task_id: str, status: str, summary: str, file_name: str, doc_number: str = "", doc_date: str = "", actual_summary: str = "", deliverable: str = "") -> bool:
+    def update_task_status_and_metadata(self, task_id: str, status: str, summary: str, file_name: str, doc_number: str = "", doc_date: str = "", actual_summary: str = "", deliverable: str = "", project: str = "") -> bool:
         """
         Cập nhật kết quả thẩm định lên Google Sheets:
         - status: 'Đã hoàn thành' hoặc 'Đang sửa lại'
-        - Điền: Sản phẩm, Số ký hiệu, Ngày ban hành, Trích yếu thực tế, Tóm tắt AI, Thời gian nộp, Tên file.
+        - Điền: Dự án, Sản phẩm, Số ký hiệu, Ngày ban hành, Trích yếu thực tế, Tóm tắt AI, Thời gian nộp, Tên file.
         """
         webhook_url = self.webhook_url or os.getenv("GOOGLE_SHEETS_WEBHOOK_URL") or DEFAULT_WEBHOOK_URL
         if webhook_url:
@@ -167,7 +201,8 @@ class TaskManager:
                     "docNumber": doc_number,
                     "docDate": doc_date,
                     "actualSummary": actual_summary,
-                    "deliverable": deliverable
+                    "deliverable": deliverable,
+                    "project": project
                 }
                 res = requests.post(webhook_url, data=json.dumps(payload), headers={'Content-Type': 'application/json'}, allow_redirects=False, timeout=25)
                 if res.status_code in [301, 302] and "Location" in res.headers:
@@ -182,6 +217,60 @@ class TaskManager:
                 sys.stderr.write(f"[LỖI] Cập nhật Google Sheets thất bại: {e}\n")
 
         return False
+
+    def scan_drive_folder(self, task_id: str) -> dict:
+        """
+        Gửi yêu cầu tới Google Apps Script Webhook để quét Thư mục Google Drive (1j8C6PalsK_Z14-C88oKGy3u38OHuKRjL).
+        Tìm tệp PDF có tên bắt đầu bằng Task ID hoặc chứa Task ID.
+        Nếu tìm thấy, tải tệp về thư mục tạm và trả về {"success": True, "local_path": ..., "file_name": ...}.
+        """
+        webhook_url = self.webhook_url or os.getenv("GOOGLE_SHEETS_WEBHOOK_URL") or DEFAULT_WEBHOOK_URL
+        if not webhook_url:
+            return {"success": False, "error": "Chưa cấu hình GOOGLE_SHEETS_WEBHOOK_URL"}
+
+        try:
+            import base64
+            import tempfile
+            payload = {
+                "action": "scan_drive",
+                "taskId": str(task_id).strip(),
+                "folderId": "1j8C6PalsK_Z14-C88oKGy3u38OHuKRjL"
+            }
+            res = requests.post(webhook_url, data=json.dumps(payload), headers={'Content-Type': 'application/json'}, allow_redirects=False, timeout=35)
+            if res.status_code in [301, 302] and "Location" in res.headers:
+                res = requests.get(res.headers["Location"], timeout=35)
+            
+            if res.status_code == 200:
+                data = res.json()
+                if data.get("success") and data.get("files"):
+                    matching_file = data["files"][0]
+                    f_name = matching_file.get("name", f"task_{task_id}.pdf")
+                    f_id = matching_file.get("id")
+                    
+                    local_dir = tempfile.gettempdir()
+                    safe_fn = re.sub(r'[^a-zA-Z0-9_\-\.]', '_', f_name)
+                    local_path = os.path.join(local_dir, safe_fn)
+                    
+                    # 1. Ưu tiên giải mã Base64 tải trực tiếp
+                    if matching_file.get("base64"):
+                        pdf_bytes = base64.b64decode(matching_file["base64"])
+                        with open(local_path, "wb") as f_out:
+                            f_out.write(pdf_bytes)
+                        return {"success": True, "local_path": local_path, "file_name": f_name, "file_id": f_id}
+                    
+                    # 2. Tải qua Google Drive export URL
+                    dl_url = matching_file.get("downloadUrl") or f"https://drive.google.com/uc?export=download&id={f_id}"
+                    r_dl = requests.get(dl_url, timeout=35)
+                    if r_dl.status_code == 200 and len(r_dl.content) > 0:
+                        with open(local_path, "wb") as f_out:
+                            f_out.write(r_dl.content)
+                        return {"success": True, "local_path": local_path, "file_name": f_name, "file_id": f_id}
+                    
+                return {"success": False, "error": f"Không tìm thấy tệp PDF nào có tên bắt đầu bằng Task #{task_id} trong Thư mục Google Drive."}
+        except Exception as e:
+            return {"success": False, "error": f"Lỗi kết nối quét Google Drive: {e}"}
+
+        return {"success": False, "error": "Không thể kết nối đến Webhook Google Drive."}
 
     def _get_all_tasks_from_local_excel(self) -> list:
         if not os.path.exists(self.excel_path):

@@ -217,6 +217,19 @@ class TaskAIAnalyzer:
                 
         return False
 
+    def extract_project_name(self, text: str) -> str:
+        """Tự động bóc tách tên Dự án chuẩn xác từ trích yếu hoặc văn bản"""
+        if not text:
+            return ""
+        m = re.search(r'(Dự\s*án(?:\s+thành\s+phần\s+\d+)?\s*[:\-\–]?\s*[^,;\.\n\r]+)', text, re.IGNORECASE)
+        if m:
+            p = m.group(1).strip()
+            p = re.sub(r'\s+theo\s+phương\s+thức.*$', '', p, flags=re.IGNORECASE)
+            p = re.sub(r'\s+thuộc\s+dự\s+án.*$', '', p, flags=re.IGNORECASE)
+            p = re.sub(r'\s+tại\s+.*$', '', p, flags=re.IGNORECASE)
+            return p.strip()
+        return ""
+
     def review_submission(self, file_path, assignee_name: str, pending_tasks: list, user_hint_text: str = "") -> dict:
         """
         Quy trình Thẩm định Sản phẩm Tự động Đa tầng (Multi-Tier Rigorous Document Review):
@@ -231,35 +244,71 @@ class TaskAIAnalyzer:
         filename = ", ".join(filenames)
 
         # 1. Trích xuất text từ văn bản / OCR ảnh và tự động nhận diện phân loại từng trang
-        raw_pages = []
+        parsed_pages = []
         for p in file_list:
             t = self._extract_text_fallback(p)
-            if t:
-                t_clean = re.sub(r'[*_`]', '', t)
-                is_header = any(kw in t_clean.upper() for kw in [
-                    "CỘNG HÒA XÃ HỘI", "ỦY BAN NHÂN DÂN", "SỞ TÀI CHÍNH", "SỐ:", "SỐ :", "V/V", "V/V:", "VỀ VIỆC", "ĐỘC LẬP – TỰ DO", "ĐỘC LẬP - TỰ DO"
-                ])
-                is_sig = any(kw in t_clean.upper() for kw in [
-                    "NƠI NHẬN", "NƠI NHẬN:", "LƯU: VT", "LƯU : VT", "KT. GIÁM ĐỐC", "PHÓ GIÁM ĐỐC", "GIÁM ĐỐC", "LƯU:"
-                ])
-                
-                if is_header and not is_sig:
-                    prio = 1
-                    page_role = "Trang đầu (Tiêu ngữ, Số ký hiệu, Ngày ban hành & Trích yếu)"
-                elif is_sig and not is_header:
-                    prio = 3
-                    page_role = "Trang cuối (Nơi nhận, Ký lưu VT & Chữ ký Lãnh đạo)"
-                elif is_header and is_sig:
-                    prio = 1
-                    page_role = "Văn bản 1 trang trọn vẹn (Đầy đủ Tiêu ngữ và Nơi nhận)"
-                else:
-                    prio = 2
-                    page_role = "Trang nội dung văn bản"
-                raw_pages.append((prio, page_role, t, p))
-            else:
-                raw_pages.append((2, "Trang nội dung văn bản", "", p))
+            t_clean = re.sub(r'[*_`]', '', t) if t else ""
+            t_up = t_clean.upper()
+            
+            header_kws = ["CỘNG HÒA XÃ HỘI", "ỦY BAN NHÂN DÂN", "SỞ TÀI CHÍNH", "SỐ:", "SỐ :", "V/V", "V/V:", "VỀ VIỆC", "ĐỘC LẬP", "KÍNH GỬI"]
+            sig_kws = ["NƠI NHẬN", "NƠI NHẬN:", "LƯU: VT", "LƯU : VT", "KT. GIÁM ĐỐC", "PHÓ GIÁM ĐỐC", "GIÁM ĐỐC", "TRƯỞNG PHÒNG", "KÝ BỞI", "CHỮ KÝ", "LƯU:"]
+            
+            h_score = sum(1 for kw in header_kws if kw in t_up)
+            s_score = sum(1 for kw in sig_kws if kw in t_up)
+            parsed_pages.append({
+                "path": p,
+                "text": t,
+                "clean": t_clean,
+                "h_score": h_score,
+                "s_score": s_score
+            })
 
-        # Sắp xếp đúng thứ tự: Trang đầu -> Thân bài -> Trang cuối (bất kể thứ tự người dùng nộp ảnh)
+        raw_pages = []
+        if len(parsed_pages) == 1:
+            item = parsed_pages[0]
+            if item["h_score"] > 0 and item["s_score"] > 0:
+                role = "Văn bản 1 trang trọn vẹn (Đầy đủ Tiêu ngữ và Nơi nhận)"
+                prio = 1
+            elif item["h_score"] >= item["s_score"] and item["h_score"] > 0:
+                role = "Trang đầu (Tiêu ngữ, Số ký hiệu, Ngày ban hành & Trích yếu)"
+                prio = 1
+            elif item["s_score"] > 0:
+                role = "Trang cuối (Nơi nhận, Ký lưu VT & Chữ ký Lãnh đạo)"
+                prio = 3
+            else:
+                role = "Trang nội dung văn bản"
+                prio = 2
+            raw_pages.append((prio, role, item["text"], item["path"]))
+        elif len(parsed_pages) == 2:
+            # Hai trang ảnh: Tuyệt đối phân định rõ ràng Trang đầu và Trang cuối (không dùng nhãn chung chung)
+            p0 = parsed_pages[0]
+            p1 = parsed_pages[1]
+            diff0 = p0["h_score"] - p0["s_score"]
+            diff1 = p1["h_score"] - p1["s_score"]
+            
+            if diff0 >= diff1:
+                raw_pages.append((1, "Trang đầu (Tiêu ngữ, Số ký hiệu, Ngày ban hành & Trích yếu)", p0["text"], p0["path"]))
+                raw_pages.append((3, "Trang cuối (Nơi nhận, Ký lưu VT & Chữ ký Lãnh đạo)", p1["text"], p1["path"]))
+            else:
+                raw_pages.append((1, "Trang đầu (Tiêu ngữ, Số ký hiệu, Ngày ban hành & Trích yếu)", p1["text"], p1["path"]))
+                raw_pages.append((3, "Trang cuối (Nơi nhận, Ký lưu VT & Chữ ký Lãnh đạo)", p0["text"], p0["path"]))
+        else:
+            # Từ 3 trang trở lên: Tìm trang có h_score cao nhất làm Trang đầu, trang có s_score cao nhất làm Trang cuối
+            sorted_by_header = sorted(parsed_pages, key=lambda x: (x["h_score"] - x["s_score"]), reverse=True)
+            head_item = sorted_by_header[0]
+            
+            remaining = [p for p in parsed_pages if p["path"] != head_item["path"]]
+            sorted_by_sig = sorted(remaining, key=lambda x: (x["s_score"] - x["h_score"]), reverse=True)
+            tail_item = sorted_by_sig[0]
+            
+            middle_items = [p for p in remaining if p["path"] != tail_item["path"]]
+            
+            raw_pages.append((1, "Trang đầu (Tiêu ngữ, Số ký hiệu, Ngày ban hành & Trích yếu)", head_item["text"], head_item["path"]))
+            for mid in middle_items:
+                raw_pages.append((2, "Trang nội dung văn bản", mid["text"], mid["path"]))
+            raw_pages.append((3, "Trang cuối (Nơi nhận, Ký lưu VT & Chữ ký Lãnh đạo)", tail_item["text"], tail_item["path"]))
+
+        # Sắp xếp đúng thứ tự: Trang đầu (1) -> Thân bài (2) -> Trang cuối (3)
         raw_pages.sort(key=lambda x: x[0])
         
         page_structure_lines = []
@@ -599,6 +648,10 @@ TRẢ VỀ ĐỊNH DẠNG JSON DUY NHẤT:
                     ]
 
                 data["assigned_staff"] = current_assignee
+                proj_name = self.extract_project_name(data.get("actual_summary") or local_text)
+                if not proj_name and matched_target_task:
+                    proj_name = matched_target_task.get("project") or self.extract_project_name(matched_target_task.get("taskName") or matched_target_task.get("task_name") or "")
+                data["project_name"] = proj_name
                 return data
             except Exception as e:
                 last_error = str(e)
@@ -606,6 +659,10 @@ TRẢ VỀ ĐỊNH DẠNG JSON DUY NHẤT:
 
         # Fallback an toàn nếu LLM lỗi mạng
         status = "completed" if regex_meta.get("document_number") and regex_meta.get("document_date") else "needs_revision"
+        fb_proj = self.extract_project_name(local_text)
+        if not fb_proj and matched_target_task:
+            fb_proj = matched_target_task.get("project") or self.extract_project_name(matched_target_task.get("taskName") or matched_target_task.get("task_name") or "")
+
         return {
             "success": True,
             "task_id": hint_task_id,
@@ -614,6 +671,7 @@ TRẢ VỀ ĐỊNH DẠNG JSON DUY NHẤT:
             "document_number": regex_meta.get("document_number", ""),
             "document_date": regex_meta.get("document_date", ""),
             "actual_summary": "Trích xuất tự động qua thể thức văn bản",
+            "project_name": fb_proj,
             "recipient_initials": regex_meta.get("recipient_initials", ""),
             "assigned_staff": assigned_staff_in_task,
             "keyword_match": True,

@@ -30,6 +30,12 @@ class GoogleWorkspaceTaskFetcher:
         return [t for t in all_tasks if t.get("status") != "Đã hoàn thành"]
 
     def generate_reminder_parts(self) -> tuple:
+        from datetime import datetime, timezone, timedelta
+        tz_vn = timezone(timedelta(hours=7))
+        now_vn = datetime.now(tz_vn)
+        now_time = now_vn.strftime("%H:%M")
+        now_date = now_vn.strftime("%d/%m/%Y")
+
         all_tasks = self.task_manager.get_all_tasks_from_sheet()
         completed_tasks = [t for t in all_tasks if t.get("status") == "Đã hoàn thành"]
         count_completed = len(completed_tasks)
@@ -40,14 +46,18 @@ class GoogleWorkspaceTaskFetcher:
             assignee_completed[ass] = assignee_completed.get(ass, 0) + 1
 
         grouped = self.task_manager.get_grouped_pending_tasks()
-        now_str = datetime.now().strftime("%H:%M ngày %d/%m/%Y")
 
         if not grouped:
-            return f"🎉 **[ZALO BOT - GOOGLE WORKSPACE]** ({now_str})\n\nTất cả các nhiệm vụ trên Google Sheets hiện tại đã HOÀN THÀNH!"
+            report_empty = (
+                f"🎉 **[ZALO BOT - GOOGLE WORKSPACE]**\n"
+                f"⏰ Thời gian: {now_time} ngày {now_date}\n\n"
+                f"Tất cả các nhiệm vụ trên Bảng giao việc hiện tại đã HOÀN THÀNH!"
+            )
+            return report_empty, self.generate_guide_message()
 
         lines = [
             "📢 **[NHẮC VIỆC TỰ ĐỘNG - GOOGLE WORKSPACE]**",
-            f"⏰ Thời gian cập nhật: {now_str}",
+            f"⏰ Thời gian: {now_time} ngày {now_date}",
             "📋 Danh sách nhiệm vụ đang chờ theo Chuyên viên:\n"
         ]
 
@@ -82,12 +92,12 @@ class GoogleWorkspaceTaskFetcher:
                     assignee_stats[assignee]["upcoming"] += 1
                     prio_icon = "🔹 [Trong hạn]"
 
-                # Làm sạch triệt để các ký tự xuống dòng / tab khiến văn bản bị đứt khúc
+                # Làm sạch triệt để các ký tự xuống dòng / tab
                 raw_name = str(t.get('task_name') or "")
                 clean_name = re.sub(r'[\r\n\t]+', ' ', raw_name)
                 clean_name = re.sub(r'\s{2,}', ' ', clean_name).strip()
 
-                # Format ngày deadline đẹp (DD/MM/YYYY)
+                # Format ngày deadline (DD/MM/YYYY)
                 raw_dl = str(t.get('deadline') or "").strip()
                 fmt_dl = raw_dl
                 if re.match(r'^\d{4}-\d{2}-\d{2}$', raw_dl):
@@ -97,8 +107,17 @@ class GoogleWorkspaceTaskFetcher:
                 diff_text = t.get('days_diff_text', '')
                 deadline_display = f"{fmt_dl} ({diff_text})" if diff_text else fmt_dl
 
+                # Thông tin bổ trợ (Dự án, Lãnh đạo, Trạng thái)
+                detail_parts = []
+                if t.get('project'):
+                    detail_parts.append(f"Dự án: {t.get('project')}")
+                if t.get('leader'):
+                    detail_parts.append(f"Lãnh đạo: {t.get('leader')}")
+                detail_parts.append(f"Hạn: {deadline_display}")
+                detail_parts.append(f"Trạng thái: {t.get('status')}")
+
                 lines.append(f"• {prio_icon} [{t.get('task_id')}] {clean_name}")
-                lines.append(f"  ⏳ Hạn hoàn thành: {deadline_display} | Trạng thái: {t.get('status')}")
+                lines.append(f"  ⏳ {' | '.join(detail_parts)}")
             lines.append("")
 
         lines.append("📊 **[THỐNG KÊ CHI TIẾT TỔNG HỢP TIẾN ĐỘ]**")
@@ -113,31 +132,112 @@ class GoogleWorkspaceTaskFetcher:
             lines.append(f"  {idx}️⃣ **{ass}**: {st['pending']} task chưa xong ({st['completed']} đã hoàn thành, {st['overdue']} quá hạn, {st['today']} đến hạn)")
         lines.append("")
 
-        sheet_url = "https://docs.google.com/spreadsheets/d/1RRb0PJB2EJv92SPHZ3_ahv2YYEn9bxjfC8JBPpTkuG4/edit?usp=sharing"
+        sheet_url = "https://docs.google.com/spreadsheets/d/1RRb0PJB2EJv92SPHZ3_ahv2YYEn9bxjfC8JBPpTkuG4/edit?gid=735957328"
         lines.append("🔗 **ĐƯỜNG DẪN TRUY CẬP GOOGLE SHEETS:**")
         lines.append("👉 **Link trực tiếp:**")
         lines.append(sheet_url)
         
         report_msg = "\n".join(lines)
+        guide_msg = self.generate_guide_message()
 
+        return report_msg, guide_msg
+
+    def generate_guide_message(self) -> str:
+        drive_folder_url = "https://drive.google.com/drive/folders/1j8C6PalsK_Z14-C88oKGy3u38OHuKRjL?usp=drive_link"
         guide_lines = [
             "📥 **HƯỚNG DẪN NỘP SẢN PHẨM & NGHIỆM THU TỰ ĐỘNG:**",
             "*(Hệ thống AI tự động đối soát thể thức, số ký hiệu, trích yếu, chữ ký lưu và cập nhật trực tiếp lên Google Sheets)*",
             "",
-            "1️⃣ **CÁCH 1: NỘP NHANH BẰNG ẢNH SCAN TRỰC TIẾP QUA ZALO (Khuyến nghị)**",
-            "• **Bước 1**: Chụp ảnh hoặc scan rõ nét nguyên trang đầu nơi có: Quốc hiệu, Tiêu ngữ, Số ký hiệu, Trích yếu và trang cuối (có Nơi nhận / Ký tên), hoặc sau khi gửi ảnh 1 mà chưa có hình 2 thuộc 1 trong 2 phần ở trên thì chỉ cần gửi tiếp trong vòng 4 giây.",
-            "• **Bước 2**: Gửi ảnh vào nhóm và kèm theo tin nhắn ghi rõ nhiệm vụ: `task [số]` hoặc `nộp task [số]` (Ví dụ: `task 2`, `nộp task 4`, `t1`).",
-            "  *(Lưu ý: Task ID trên bảng giao việc luôn được đánh số tuần tự 1, 2, 3... để chuyên viên dễ ghi nhớ và đối soát)*.",
+            "1️⃣ **CÁCH 1: NỘP NHANH BẰNG ẢNH SCAN / CHỤP TRỰC TIẾP QUA ZALO (Khuyến nghị)**",
+            "• **Bước 1**: Chụp ảnh hoặc scan rõ nét nguyên trang đầu nơi có: Quốc hiệu, Tiêu ngữ, Số ký hiệu, Trích yếu và trang cuối (có Nơi nhận / Ký tên). Hoặc sau khi gửi ảnh 1 mà chưa có ảnh 2 thì chỉ cần gửi tiếp trong vòng 8 giây.",
+            "• **Bước 2**: Nhắn tin vào nhóm ghi rõ cú pháp: `Nộp task [số]` hoặc `task [số]` (Ví dụ: `Nộp task 4`, `task 2`).",
+            "  *(Lưu ý: Hệ thống gom ảnh trong 8 giây, tự động nhận diện trang nào chứa tiêu ngữ/trích yếu và trang nào chứa nơi nhận/chữ ký, rồi tích 'Đã hoàn thành' trên Bảng giao việc)*.",
             "",
-            "2️⃣ **CÁCH 2: NỘP VĂN BẢN PDF CHẤT LƯỢNG CAO (Dự thảo / Báo cáo nhiều trang)**",
-            "• Do Zalo Bot API hạn chế tải tệp nhị phân PDF lớn trực tiếp qua khung chat thông thường, chuyên viên tải tệp PDF lên Thư mục Google Drive dùng chung của Phòng / Web portal nội bộ và gửi link/tên tệp vào chat kèm cú pháp `task [số] - đã tải Drive` để lưu trữ hồ sơ chính thức.",
+            "2️⃣ **CÁCH 2: NỘP VĂN BẢN PDF CHẤT LƯỢNG CAO QUA GOOGLE DRIVE**",
+            "• **Bước 1**: Tải tệp PDF sản phẩm vào Thư mục Google Drive dùng chung của Phòng:",
+            f"  🔗 {drive_folder_url}",
+            "• **Đặt tên tệp**: Bắt đầu bằng số Task (Ví dụ: `Task 4 - To trinh Du an Moc Bai.pdf` hoặc `4_Bao_cao_KKT.pdf`).",
+            "• **Bước 2**: Nhắn vào chat Zalo cú pháp: `nộp task [số] pdf` (Ví dụ: `nộp task 4 pdf`).",
+            "  *(AI sẽ tự động quét Google Drive, tải PDF về đối soát thể thức Nghị định 30/2020/NĐ-CP và cập nhật Bảng giao việc)*.",
             "",
-            "📌 **Ví dụ thao tác chuẩn:**",
-            "  👉 Gửi 2 ảnh văn bản -> Nhắn `task 2` -> Hệ thống phản hồi xác nhận và cập nhật ngay trạng thái 'Đã hoàn thành' trên Bảng giao việc!"
+            "📌 **Tra cứu nhanh nhiệm vụ:**",
+            "  👉 Gõ `task [số]` (Ví dụ: `task 4` hoặc `xem task 4`) để xem đầy đủ thông tin nhiệm vụ, dự án, hạn hoàn thành và kết quả thẩm định."
         ]
-        guide_msg = "\n".join(guide_lines)
+        return "\n".join(guide_lines)
 
-        return report_msg, guide_msg
+    def generate_evening_review_summary(self) -> str:
+        """
+        Bản tin Tổng kết cuối ngày (17:30):
+        Liệt kê các task chuyên viên đã nộp/hoàn thành trong ngày:
+        Chuyên viên, Lãnh đạo phòng, Dự án, Trích yếu, Số ký hiệu, Ngày ban hành.
+        Nếu không có sản phẩm nào thì ghi rõ 0 sản phẩm.
+        """
+        from datetime import datetime, timezone, timedelta
+        tz_vn = timezone(timedelta(hours=7))
+        now_vn = datetime.now(tz_vn)
+        now_time = now_vn.strftime("%H:%M")
+        now_date = now_vn.strftime("%d/%m/%Y")
+
+        all_tasks = self.task_manager.get_all_tasks_from_sheet()
+        
+        # Lọc các task đã hoàn thành trong ngày hôm nay (dựa trên submittedAt hoặc status)
+        # submittedAt thường có dạng "2026-10-19 14:30:00" hoặc "19/10/2026"
+        today_date_str = now_vn.strftime("%Y-%m-%d")
+        today_vn_fmt = now_vn.strftime("%d/%m/%Y")
+        
+        completed_today = []
+        for t in all_tasks:
+            status = str(t.get("status") or "").strip()
+            submitted = str(t.get("submittedAt") or "").strip()
+            
+            # Kiểm tra xem có nộp hôm nay không
+            if status == "Đã hoàn thành":
+                if today_date_str in submitted or today_vn_fmt in submitted:
+                    completed_today.append(t)
+                elif not submitted:
+                    # Nếu không có ngày nộp nhưng là task đã hoàn thành mới nhất
+                    pass
+
+        lines = [
+            "📋 **[TỔNG KẾT TIẾN ĐỘ CUỐI NGÀY - PHÒNG PPP & QUẢN LÝ NỢ]**",
+            f"⏰ Thời gian: {now_time} ngày {now_date}",
+            "🏛️ **Sở Tài chính TP.Hồ Chí Minh**",
+            "────────────────────────────"
+        ]
+
+        if not completed_today:
+            lines.append("📊 **KẾT QUẢ NGHIỆM THU HÔM NAY:**")
+            lines.append("• **Số lượng sản phẩm văn bản đã nộp hôm nay**: 0 sản phẩm.")
+            lines.append("• Hôm nay chưa ghi nhận thêm sản phẩm văn bản mới nào được nộp qua hệ thống Zalo Bot / Drive.")
+            lines.append("")
+            lines.append("💡 **Nhắc nhở công vụ**: Các đồng chí chuyên viên còn nhiệm vụ đến hạn hoặc quá hạn vui lòng khẩn trương hoàn thiện văn bản và nộp nghiệm thu.")
+        else:
+            lines.append(f"🎉 **KẾT QUẢ NGHIỆM THU HÔM NAY ({len(completed_today)} SẢN PHẨM HOÀN THÀNH):**\n")
+            for idx, t in enumerate(completed_today, 1):
+                t_id = t.get("taskId") or t.get("task_id")
+                t_name = t.get("taskName") or t.get("task_name")
+                assignee = t.get("assignee", "Chưa phân công")
+                leader = t.get("leader", "Lãnh đạo phòng")
+                proj = t.get("project") or "Dự án liên quan"
+                trich_yeu = t.get("trichYeu") or t.get("aiSummary") or t_name
+                so_kh = t.get("soKyHieu") or "Văn bản nội bộ"
+                ngay_bh = t.get("ngayBanHanh") or now_date
+                deliv = t.get("deliverable") or "Công văn"
+
+                lines.append(f"**{idx}. [Task #{t_id}] {t_name}**")
+                lines.append(f"   • 👤 **Chuyên viên**: {assignee}")
+                lines.append(f"   • 👔 **Lãnh đạo phòng**: {leader}")
+                lines.append(f"   • 🏢 **Dự án**: {proj}")
+                lines.append(f"   • 📦 **Sản phẩm**: {deliv} (Số: {so_kh} | Ngày: {ngay_bh})")
+                lines.append(f"   • 📌 **Trích yếu**: {trich_yeu}")
+                lines.append(f"   • 🟢 **Tình trạng**: Đã nghiệm thu chuẩn thể thức & Cập nhật Google Sheets.")
+                lines.append("")
+
+        lines.append("────────────────────────────")
+        lines.append("🔗 **BẢNG GIAO VIỆC GOOGLE SHEETS:**")
+        lines.append("https://docs.google.com/spreadsheets/d/1RRb0PJB2EJv92SPHZ3_ahv2YYEn9bxjfC8JBPpTkuG4/edit?gid=735957328")
+        
+        return "\n".join(lines)
 
     def generate_formatted_reminder(self) -> str:
         report_msg, guide_msg = self.generate_reminder_parts()
@@ -147,3 +247,5 @@ if __name__ == "__main__":
     fetcher = GoogleWorkspaceTaskFetcher()
     print("=== LIVE GOOGLE WORKSPACE TASK REMINDER REPORT ===")
     print(fetcher.generate_formatted_reminder())
+    print("\n=== EVENING REVIEW SUMMARY ===")
+    print(fetcher.generate_evening_review_summary())

@@ -134,26 +134,42 @@ def process_buffered_images(chat_id: str, sender_name: str, bot_key: str):
 
 def extract_task_submission_intent(text: str):
     """
-    Nhận diện linh hoạt mọi biến thể nộp bài hoặc chỉ định task:
+    Nhận diện các biến thể CHỈ ĐỊNH NỘP BÀI:
     - nộp task 4, Nộp task 4, nop task 4, Nop task 4, nop 4, nộp 4
-    - nộp bài task 4, nop bai task 4, bài task 4, cho task 4, nộp cho task 4
-    - task 4, Task 4, task4, t4, T4, nv 4, nv4, #4
-    Trả về task_id (chuỗi số, ví dụ '4') hoặc None.
+    - nộp bài task 4, nop bai task 4, bài task 4, cho task 4, nộp cho task 4, gửi task 4
     """
     if not text:
         return None
     clean = text.lower().strip()
-    
-    # 1. Các biến thể có hành động nộp / gửi / cho
     m_action = re.search(r'(?:nộp|nop|gửi|gui|cho|bài|bai)\s*(?:bài\s*)?(?:cho\s*)?(?:task|nhiệm\s*vụ|nv|stt|số|t)?\s*#?([0-9]{1,3})\b', clean)
     if m_action:
         return m_action.group(1)
-        
-    # 2. Cú pháp viết tắt: task 4, task4, t4, nv4, nv 4, #4
-    m_short = re.match(r'^(?:task|t|nv)?\s*#?([0-9]{1,3})$', clean)
-    if m_short:
-        return m_short.group(1)
-        
+    return None
+
+def extract_drive_pdf_intent(text: str):
+    """
+    Nhận diện lệnh nộp PDF qua Google Drive:
+    - nộp task 4 pdf, task 4 pdf, nop task 4 pdf, task 4 drive, nộp task 4 drive, 4 pdf
+    """
+    if not text:
+        return None
+    clean = text.lower().strip()
+    m_pdf = re.search(r'(?:nộp|nop|gửi|gui)?\s*(?:task|nv|t)?\s*#?([0-9]{1,3})\s*(?:pdf|drive)\b', clean)
+    if m_pdf:
+        return m_pdf.group(1)
+    return None
+
+def extract_task_view_intent(text: str):
+    """
+    Nhận diện lệnh TRA CỨU / XEM THÔNG TIN NHIỆM VỤ:
+    - task 4, Task 4, xem task 4, tra cứu task 4, thông tin task 4, t4, nv 4, #4
+    """
+    if not text:
+        return None
+    clean = text.lower().strip()
+    m_view = re.match(r'^(?:xem|tra\s*cứu|chi\s*tiết|thông\s*tin)?\s*(?:task|nhiệm\s*vụ|nv|t)?\s*#?([0-9]{1,3})$', clean)
+    if m_view:
+        return m_view.group(1)
     return None
 
 try:
@@ -493,7 +509,7 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
                 send_zalo_message(
                     chat_id,
                     f"📥 Đã tiếp nhận {c_now} trang ảnh từ chuyên viên {sender_name}.\n"
-                    f"👉 Nếu văn bản còn trang khác (trang tiêu ngữ hoặc nơi nhận/chữ ký), Anh/Chị gửi tiếp trong vòng 6 giây hoặc gõ cú pháp `nộp task [số]` (ví dụ: `nộp task 4`).",
+                    f"👉 Nếu văn bản còn trang khác (trang tiêu ngữ hoặc nơi nhận/chữ ký), Anh/Chị gửi tiếp trong vòng 8 giây hoặc gõ cú pháp `nộp task [số]` (ví dụ: `nộp task 4`).",
                     bot_key=bot_key
                 )
             else:
@@ -513,12 +529,12 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
                 send_zalo_message(
                     chat_id,
                     f"📥 Đã nhận thêm {len(downloaded_files)} trang ảnh (Tổng cộng: {c_total} trang).\n"
-                    f"⏳ Đang chờ thêm trang tiếp theo hoặc bắt đầu đối soát sau 6 giây...",
+                    f"⏳ Đang chờ thêm trang tiếp theo hoặc bắt đầu đối soát sau 8 giây...",
                     bot_key=bot_key
                 )
 
-            # Bộ đệm: chờ 6.0 giây sau trang ảnh cuối cùng để chuyên viên kịp gửi ảnh tiếp theo
-            t = threading.Timer(6.0, process_buffered_images, args=(str_chat_id, sender_name, bot_key))
+            # Bộ đệm: chờ 8.0 giây sau trang ảnh cuối cùng để chuyên viên kịp gửi ảnh tiếp theo
+            t = threading.Timer(8.0, process_buffered_images, args=(str_chat_id, sender_name, bot_key))
             USER_IMAGE_BATCH[str_chat_id]["timer"] = t
             t.daemon = True
             t.start()
@@ -544,7 +560,6 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
                 send_zalo_message(chat_id, reminder, bot_key=bot_key)
             return
         else:
-            # Bot 2 (Bot Giáo sư PPP): Chuyên trách Pháp lý RAG & Search Engine
             redirect_msg = (
                 "⚖️ **Bot Giáo sư PPP** là AI Agent chuyên trách **Tra cứu Pháp lý PPP & Search Engine** (RAG Vector Store 23 Lĩnh vực Luật + Web Search Grounding).\n\n"
                 "👉 Để xem **Báo cáo Tiến độ & Nhắc việc Bảng giao việc**, Anh/Chị vui lòng nhắn tin với **Bot PPP Full Service** (Bot 1) nhé!"
@@ -552,16 +567,19 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
             send_zalo_message(chat_id, redirect_msg, bot_key=bot_key)
             return
 
-    # 3. Lệnh Hướng dẫn / Trợ giúp riêng cho từng Bot
-    if clean_text in ["/help", "/start", "hướng dẫn", "chức năng", "help"]:
+    # 3. Lệnh Tổng kết tiến độ cuối ngày (17:30)
+    if clean_text in ["tổng kết", "tổng kết ngày", "báo cáo ngày", "báo cáo cuối ngày", "tổng kết tiến độ"]:
         if bot_key == "bot1":
-            help_msg = (
-                f"👋 Chào {sender_name}! Tôi là **{bot_cfg['name']}**.\n\n"
-                "📌 **Chức năng chính của Bot 1 (Task Master):**\n"
-                "• **Nhắc việc**: Gõ `nv` hoặc `tiến độ` để xem task quá hạn & hạn hôm nay.\n"
-                "• **Tra cứu Task**: Gõ `task [số]` (ví dụ: `task 4`) để xem thông tin chi tiết trên Bảng giao việc.\n"
-                "• **Đối soát nộp bài**: Gửi ảnh scan văn bản (JPG/PNG) để AI đối soát và tự động tích 'Đã hoàn thành'."
-            )
+            summary_msg = task_fetcher.generate_evening_review_summary()
+            send_zalo_message(chat_id, summary_msg, bot_key=bot_key)
+            return
+
+    # 4. Lệnh Hướng dẫn / Trợ giúp riêng cho từng Bot
+    if clean_text in ["/help", "/start", "hướng dẫn", "chức năng", "help", "hướng dẫn nộp", "cách nộp", "cách nộp sản phẩm", "hd"]:
+        if bot_key == "bot1":
+            guide_msg = task_fetcher.generate_guide_message()
+            send_zalo_message(chat_id, guide_msg, bot_key=bot_key)
+            return
         else:
             help_msg = (
                 f"👋 Chào {sender_name}! Tôi là **Bot Giáo sư PPP** (Legal RAG & Search Engine AI Agent).\n\n"
@@ -570,14 +588,14 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
                 "• **Web Search Grounding**: Tra cứu tin tức, sự kiện, quy định pháp luật mới nhất theo thời gian thực trên Google Search.\n"
                 "• **Thẩm định Pháp lý**: Phân tích & trích dẫn Điều/Khoản chính xác."
             )
-        send_zalo_message(chat_id, help_msg, bot_key=bot_key)
-        return
+            send_zalo_message(chat_id, help_msg, bot_key=bot_key)
+            return
 
-    # 4. PHÂN LUỒNG XỬ LÝ RIÊNG BIỆT - TUYỆT ĐỐI KHÔNG TRỘN LẪN CÔNG VIỆC BOT 1 VÀ BOT 2
+    # 5. PHÂN LUỒNG XỬ LÝ RIÊNG BIỆT - TUYỆT ĐỐI KHÔNG TRỘN LẪN CÔNG VIỆC BOT 1 VÀ BOT 2
     if bot_key == "bot1":
         str_chat_id = str(chat_id)
 
-        # 4.0. Nếu người dùng đang gửi ảnh và ảnh đang nằm trong bộ đệm chờ thẩm định:
+        # 5.0. Nếu người dùng đang gửi ảnh và ảnh đang nằm trong bộ đệm chờ thẩm định:
         with USER_IMAGE_LOCK:
             if str_chat_id in USER_IMAGE_BATCH:
                 # Ghi nhận ngay tin nhắn này làm gợi ý (task 4, nộp task 4, nop task 4...)
@@ -592,56 +610,121 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
                         USER_IMAGE_BATCH[str_chat_id]["timer"].cancel()
                     except Exception:
                         pass
-                send_zalo_message(chat_id, f"📌 Đã ghi nhận chỉ định `{raw_text}` cho tập ảnh vừa gửi. Đang bắt đầu đối soát ngay...", bot_key=bot_key)
+                c_pics = len(USER_IMAGE_BATCH[str_chat_id]["files"])
+                send_zalo_message(chat_id, f"📌 Đã ghi nhận chỉ định `{raw_text}` cho tập {c_pics} trang ảnh vừa gửi. Đang bắt đầu đối soát ngay...", bot_key=bot_key)
                 t = threading.Timer(2.0, process_buffered_images, args=(str_chat_id, sender_name, bot_key))
                 USER_IMAGE_BATCH[str_chat_id]["timer"] = t
                 t.daemon = True
                 t.start()
-                return  # Xử lý liên kết trực tiếp vào ảnh vừa gửi
+                return
 
-        # 4.1. Tra cứu chi tiết một Task (chỉ khi gõ rõ: xem task 4, tra cứu task 4, thông tin task 4)
-        info_match = re.search(r'^(?:xem|tra\s*cứu|chi\s*tiết|thông\s*tin)\s*(?:task|nhiệm\s*vụ|nv)?\s*#?([0-9]{1,3})$', clean_text.strip())
-        if info_match:
-            t_id = info_match.group(1)
-            try:
-                live_tasks = task_fetcher.fetch_live_tasks()
-                matched = [t for t in live_tasks if str(t.get("taskId") or t.get("task_id", "")).strip() == t_id]
-                if matched:
-                    task_info = matched[0]
-                    t_name = task_info.get("taskName") or task_info.get("task_name")
-                    t_assignee = task_info.get("assignee") or task_info.get("assigned_to")
-                    t_deadline = task_info.get("deadline")
-                    t_status = task_info.get("status")
-                    t_deliv = task_info.get("deliverable") or "Văn bản"
-                    reply_task = (
-                        f"📌 **Thông tin Bảng giao việc - Task #{t_id}:**\n"
-                        f"• **Nhiệm vụ**: {t_name}\n"
-                        f"• **Chuyên viên phụ trách**: {t_assignee}\n"
-                        f"• **Hạn hoàn thành**: {t_deadline}\n"
-                        f"• **Trạng thái**: {t_status}\n"
-                        f"• **Sản phẩm**: {t_deliv}"
-                    )
-                    send_zalo_message(chat_id, reply_task, bot_key=bot_key)
-                    return
-                else:
-                    send_zalo_message(chat_id, f"⚠️ Không tìm thấy Task #{t_id} trên Bảng giao việc Google Sheets. Hiện tại phòng đang có các task từ #1 đến #{len(live_tasks)}.", bot_key=bot_key)
-                    return
-            except Exception as e:
-                log_event(f"Lỗi tra cứu task #{t_id}: {e}")
+        # 5.1. Nộp tệp PDF qua Thư mục Google Drive của Phòng
+        pdf_task_id = extract_drive_pdf_intent(clean_text)
+        if pdf_task_id:
+            send_zalo_message(chat_id, f"🔍 Đang quét Thư mục Google Drive của Phòng để tìm tệp PDF cho Task #{pdf_task_id}...", bot_key=bot_key)
+            res_drive = bot_agent.task_manager.scan_drive_folder(pdf_task_id) if (bot_agent.task_manager and hasattr(bot_agent.task_manager, 'scan_drive_folder')) else {"success": False, "error": "Chưa hỗ trợ scan drive"}
+            if res_drive.get("success"):
+                local_pdf = res_drive.get("local_path")
+                fn_pdf = res_drive.get("file_name", f"task_{pdf_task_id}.pdf")
+                send_zalo_message(chat_id, f"📥 Đã tìm thấy tệp `{fn_pdf}` trên Google Drive. Đang tiến hành thẩm định thể thức tự động theo Nghị định 30/2020/NĐ-CP...", bot_key=bot_key)
+                review_ans = bot_agent.process_message(
+                    user_text=f"Nộp task {pdf_task_id}",
+                    sender_name=sender_name,
+                    file_attachment_path=local_pdf
+                )
+                send_zalo_message(chat_id, review_ans, bot_key=bot_key)
+                if os.path.exists(local_pdf):
+                    try: os.remove(local_pdf)
+                    except Exception: pass
+                return
+            else:
+                err_drive = res_drive.get("error", "Không tìm thấy tệp")
+                fail_msg = (
+                    f"⚠️ **Thông báo kết quả quét Google Drive cho Task #{pdf_task_id}:**\n\n"
+                    f"• {err_drive}\n\n"
+                    f"🔗 **Đường dẫn Thư mục Google Drive của Phòng:**\n"
+                    f"https://drive.google.com/drive/folders/1j8C6PalsK_Z14-C88oKGy3u38OHuKRjL?usp=drive_link\n\n"
+                    f"👉 **Hướng dẫn nộp lại:**\n"
+                    f"1. Tải tệp PDF lên Thư mục Drive trên, đặt tên bắt đầu bằng Task #{pdf_task_id} (Ví dụ: `Task {pdf_task_id} - To trinh.pdf` hoặc `{pdf_task_id}_Bao_cao.pdf`).\n"
+                    f"2. Nhắn lại vào nhóm: `nộp task {pdf_task_id} pdf` để AI đối soát và cập nhật hoàn thành!"
+                )
+                send_zalo_message(chat_id, fail_msg, bot_key=bot_key)
+                return
 
-        # 4.2. Nhận diện mọi biến thể nộp bài / chỉ định task (task 4, Task 4, nộp task 4, nop task 4, t4, nv 4, #4...)
+        # 5.2. Nhận diện hành động CHỈ ĐỊNH NỘP BÀI (nộp task 4, nop task 4, gửi task 4, nộp 4...)
         sub_id = extract_task_submission_intent(clean_text)
         if sub_id:
             RECENT_USER_TEXTS[str_chat_id] = {"text": raw_text, "time": time.time()}
-            send_zalo_message(chat_id, f"📌 Đã ghi nhận chỉ định nộp bài cho Task #{sub_id} từ chuyên viên {sender_name}.\n👉 Mời Anh/Chị gửi ảnh scan văn bản (có thể gửi nhiều trang liên tiếp), AI sẽ tự động đối soát và cập nhật hoàn thành trên Google Sheets!", bot_key=bot_key)
+            send_zalo_message(
+                chat_id,
+                f"📌 Đã ghi nhận chỉ định nộp bài cho Task #{sub_id} từ chuyên viên {sender_name}.\n"
+                f"👉 Mời Anh/Chị gửi ảnh scan văn bản (có thể gửi nhiều trang liên tiếp trong 8 giây), hoặc tải tệp PDF lên Google Drive rồi gõ `nộp task {sub_id} pdf` để AI đối soát và cập nhật hoàn thành trên Google Sheets!",
+                bot_key=bot_key
+            )
             return
 
-        # Với mọi tin nhắn khác không thuộc Bảng giao việc, Bot 1 KHÔNG gọi RAG Pháp lý mà hướng dẫn sang Bot 2
+        # 5.3. Tra cứu chi tiết một Task (task 4, xem task 4, t4, nv 4...)
+        view_task_id = extract_task_view_intent(clean_text)
+        if view_task_id:
+            try:
+                all_sheet_tasks = task_fetcher.task_manager.get_all_tasks_from_sheet()
+                matched = [t for t in all_sheet_tasks if str(t.get("taskId") or t.get("task_id", "")).strip() == str(view_task_id).strip()]
+                if matched:
+                    t_info = matched[0]
+                    t_name = t_info.get("taskName") or t_info.get("task_name") or ""
+                    t_proj = t_info.get("project") or ""
+                    t_assignee = t_info.get("assignee") or t_info.get("assigned_to") or "Chưa phân công"
+                    t_leader = t_info.get("leader") or ""
+                    t_deadline = t_info.get("deadline") or ""
+                    t_priority = t_info.get("priority") or "Bình thường"
+                    t_status = t_info.get("status") or "Chưa bắt đầu"
+                    t_deliv = t_info.get("deliverable") or "Công văn"
+                    t_so = t_info.get("soKyHieu") or "Chưa có"
+                    t_ngay = t_info.get("ngayBanHanh") or "Chưa có"
+                    t_trich = t_info.get("trichYeu") or ""
+                    t_ai = t_info.get("aiSummary") or ""
+                    t_sub_time = t_info.get("submittedAt") or "Chưa nộp"
+                    t_fn = t_info.get("fileName") or "Chưa có"
+
+                    status_icon = "🟢 [Đã hoàn thành]" if t_status == "Đã hoàn thành" else ("🔴 [Đang sửa lại]" if t_status == "Đang sửa lại" else "🟡 [Đang thực hiện]")
+                    
+                    reply_lines = [
+                        f"📌 **THÔNG TIN CHI TIẾT NHIỆM VỤ - TASK #{view_task_id}:**",
+                        f"• 📋 **Nhiệm vụ**: {t_name}",
+                        f"• 🏢 **Dự án**: {t_proj if t_proj else 'Theo trích yếu văn bản'}",
+                        f"• 👤 **Chuyên viên phụ trách**: {t_assignee}",
+                        f"• 👔 **Lãnh đạo phòng**: {t_leader if t_leader else 'Lãnh đạo phòng phụ trách'}",
+                        f"• ⏳ **Hạn hoàn thành**: {t_deadline} | Ưu tiên: {t_priority}",
+                        f"• 📊 **Trạng thái**: {status_icon} {t_status}",
+                        f"• 📦 **Sản phẩm yêu cầu**: {t_deliv}",
+                        f"• 📑 **Số ký hiệu**: {t_so} | Ngày: {t_ngay}",
+                        f"• 📌 **Trích yếu**: {t_trich if t_trich else t_name}"
+                    ]
+                    if t_status == "Đã hoàn thành" or (t_sub_time and t_sub_time != "Chưa nộp"):
+                        reply_lines.extend([
+                            f"• 💡 **Đánh giá AI**: {t_ai}",
+                            f"• ⏰ **Thời gian nộp**: {t_sub_time} | Tệp: {t_fn}"
+                        ])
+                    reply_lines.extend([
+                        "────────────────────────────",
+                        "🔗 **Link tra cứu Bảng giao việc Google Sheets:**",
+                        "https://docs.google.com/spreadsheets/d/1RRb0PJB2EJv92SPHZ3_ahv2YYEn9bxjfC8JBPpTkuG4/edit?gid=735957328"
+                    ])
+                    send_zalo_message(chat_id, "\n".join(reply_lines), bot_key=bot_key)
+                    return
+                else:
+                    send_zalo_message(chat_id, f"⚠️ Không tìm thấy Task #{view_task_id} trên Bảng giao việc Google Sheets. Hiện tại phòng đang có các task từ #1 đến #{len(all_sheet_tasks)}.", bot_key=bot_key)
+                    return
+            except Exception as e:
+                log_event(f"Lỗi tra cứu task #{view_task_id}: {e}")
+
+        # Với mọi tin nhắn khác không thuộc Bảng giao việc, Bot 1 hướng dẫn chuẩn công vụ
         redirect_msg = (
             f"👋 Chào {sender_name}! Tôi là **Bot 1 (Task Master)** - chuyên trách **Quản lý Tiến độ & Bảng giao việc** Phòng Hợp tác Công tư và Quản lý Nợ.\n\n"
             "📌 **Để xem tiến độ**: Gõ `nv` hoặc `tiến độ`.\n"
             "📌 **Để tra cứu nhiệm vụ**: Gõ `task [số]` (ví dụ: `task 4`).\n"
-            "📌 **Để đối soát hoàn thành**: Gửi ảnh scan văn bản (JPG/PNG) có tiêu ngữ & nơi nhận.\n\n"
+            "📌 **Để xem hướng dẫn nộp**: Gõ `hướng dẫn` hoặc `hướng dẫn nộp`.\n"
+            "📌 **Để đối soát hoàn thành**: Gửi ảnh scan văn bản (JPG/PNG) hoặc tải PDF lên Drive rồi gõ `nộp task [số] pdf`.\n\n"
             "⚖️ **Tra cứu Pháp luật**: Để tra cứu **Văn bản quy phạm pháp luật, Nghị định, Luật PPP** hoặc tài liệu chuyên ngành, Anh/Chị vui lòng nhắn tin với **Bot Giáo sư PPP (Bot 2)** nhé!"
         )
         send_zalo_message(chat_id, redirect_msg, bot_key=bot_key)
@@ -761,13 +844,43 @@ def run_http_health_server():
                 self.wfile.write((log_data or "No logs recorded yet.").encode("utf-8"))
                 return
 
+            if self.path.startswith("/api/cron/morning"):
+                self.send_response(200)
+                self.send_header("Content-type", "application/json; charset=utf-8")
+                self.end_headers()
+                def run_m():
+                    try:
+                        rep, g = task_fetcher.generate_reminder_parts()
+                        send_zalo_message("2327925421752384731", rep, bot_key="bot1")
+                        time.sleep(0.5)
+                        send_zalo_message("2327925421752384731", g, bot_key="bot1")
+                    except Exception as e:
+                        print(f"Manual morning trigger error: {e}")
+                threading.Thread(target=run_m, daemon=True).start()
+                self.wfile.write(json.dumps({"success": True, "message": "Triggered 07:45 morning reminder"}).encode("utf-8"))
+                return
+
+            if self.path.startswith("/api/cron/evening"):
+                self.send_response(200)
+                self.send_header("Content-type", "application/json; charset=utf-8")
+                self.end_headers()
+                def run_e():
+                    try:
+                        eve = task_fetcher.generate_evening_review_summary()
+                        send_zalo_message("2327925421752384731", eve, bot_key="bot1")
+                    except Exception as e:
+                        print(f"Manual evening trigger error: {e}")
+                threading.Thread(target=run_e, daemon=True).start()
+                self.wfile.write(json.dumps({"success": True, "message": "Triggered 17:30 evening summary"}).encode("utf-8"))
+                return
+
             self.send_response(200)
             self.send_header("Content-type", "application/json; charset=utf-8")
             self.end_headers()
             info = {
                 "status": "online",
                 "service": "Zalo Bot PPP Task Master (Bot 1)",
-                "version": "3.3.0-flexible-task-intent-and-sync",
+                "version": "3.4.0-drive-pdf-and-cron-sync",
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "log_count": len(RECENT_LOGS)
             }
@@ -797,6 +910,65 @@ def keep_alive_ping():
             print(f"⚠️ [KEEP-ALIVE Notice]: {e}", flush=True)
         time.sleep(600)  # Ping tự động mỗi 10 phút (600 giây)
 
+def daily_cron_scheduler():
+    """
+    Tiến trình chạy nền 24/7 kiểm tra thời gian thực Việt Nam (UTC+7):
+    - 07:45 Sáng: Tự động phát Bản tin nhắc việc & Báo cáo tiến độ đầu ngày.
+    - 17:30 Chiều: Tự động phát Bản tin Tổng kết cuối ngày (liệt kê các task hoàn thành hoặc ghi rõ 0 sản phẩm).
+    """
+    from datetime import datetime, timezone, timedelta
+    tz_vn = timezone(timedelta(hours=7))
+    last_morning_sent = ""
+    last_evening_sent = ""
+    
+    print("⏰ [CRON SCHEDULER] Đã khởi chạy tiến trình tự động phát bản tin 07:45 & 17:30 (Múi giờ Việt Nam)...", flush=True)
+    while True:
+        try:
+            now_vn = datetime.now(tz_vn)
+            today_str = now_vn.strftime("%Y-%m-%d")
+            hour = now_vn.hour
+            minute = now_vn.minute
+            
+            target_chats = set()
+            target_chats.add("2327925421752384731")  # Group Zalo chính thức Phòng PPP&QLN
+            
+            env_chat = os.getenv("DEFAULT_ZALO_CHAT_ID") or os.getenv("ZALO_GROUP_CHAT_ID")
+            if env_chat:
+                target_chats.add(str(env_chat).strip())
+                
+            with USER_IMAGE_LOCK:
+                for c_id in RECENT_USER_TEXTS.keys():
+                    target_chats.add(str(c_id))
+
+            # 1. Phát bản tin 07:45 sáng
+            if hour == 7 and minute == 45 and last_morning_sent != today_str:
+                last_morning_sent = today_str
+                print(f"[{now_vn.strftime('%H:%M:%S')}][CRON] 📢 Đang phát bản tin nhắc việc 07:45 sáng...", flush=True)
+                try:
+                    report_msg, guide_msg = task_fetcher.generate_reminder_parts()
+                    for c_id in target_chats:
+                        send_zalo_message(c_id, report_msg, bot_key="bot1")
+                        time.sleep(0.5)
+                        send_zalo_message(c_id, guide_msg, bot_key="bot1")
+                except Exception as ex_m:
+                    print(f"⚠️ [CRON Morning Error]: {ex_m}", flush=True)
+
+            # 2. Phát bản tin 17:30 chiều
+            if hour == 17 and minute == 30 and last_evening_sent != today_str:
+                last_evening_sent = today_str
+                print(f"[{now_vn.strftime('%H:%M:%S')}][CRON] 📋 Đang phát bản tin tổng kết 17:30 chiều...", flush=True)
+                try:
+                    evening_msg = task_fetcher.generate_evening_review_summary()
+                    for c_id in target_chats:
+                        send_zalo_message(c_id, evening_msg, bot_key="bot1")
+                except Exception as ex_e:
+                    print(f"⚠️ [CRON Evening Error]: {ex_e}", flush=True)
+
+        except Exception as e:
+            print(f"⚠️ [CRON Exception]: {e}", flush=True)
+            
+        time.sleep(25)
+
 def start_bot_service():
     is_render = bool(os.getenv("RENDER")) or bool(os.getenv("RENDER_SERVICE_ID")) or ("onrender.com" in os.getenv("RENDER_EXTERNAL_URL", ""))
     if is_render:
@@ -815,6 +987,10 @@ def start_bot_service():
         t_http.start()
         t_ping = threading.Thread(target=keep_alive_ping, daemon=True)
         t_ping.start()
+
+    # Khởi chạy Scheduler tự động phát tin 07:45 & 17:30 (Chạy trên cả Cloud và Local)
+    t_cron = threading.Thread(target=daily_cron_scheduler, daemon=True)
+    t_cron.start()
 
     # 2. Kích hoạt Bot theo chế độ RUN_MODE (bot1_only trên Render Cloud, bot2_only/local ở máy)
     if is_render or mode in ["bot1_only", "cloud"]:
