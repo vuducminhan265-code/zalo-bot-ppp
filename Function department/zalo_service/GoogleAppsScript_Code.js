@@ -206,7 +206,20 @@ function setupHeadersAndFormatting() {
   headerRange.setVerticalAlignment("middle");
   sheet.setRowHeight(7, 36);
 
-  // 4. Cấu hình Dropdown Data Validation 4 trạng thái trên H8:H100 (Cột 8)
+  // 4. Xóa sạch toàn bộ Data Validation cũ bị sót lại trên các cột khác (đặc biệt là Cột F Hạn hoàn thành)
+  sheet.getRange("A8:G100").clearDataValidations();
+  sheet.getRange("I8:O100").clearDataValidations();
+
+  // Định dạng chuẩn Date Picker sạch sẽ cho Cột F (Hạn hoàn thành - Cột 6)
+  var deadlineRange = sheet.getRange("F8:F100");
+  deadlineRange.setNumberFormat("yyyy-mm-dd");
+  var dateRule = SpreadsheetApp.newDataValidation()
+    .requireDate()
+    .setAllowInvalid(true)
+    .build();
+  deadlineRange.setDataValidation(dateRule);
+
+  // 5. Cấu hình Dropdown Data Validation 4 trạng thái DUY NHẤT trên Cột H (H8:H100 - Cột 8)
   var statusList = ["Chưa bắt đầu", "Đang thực hiện", "Đang sửa lại", "Đã hoàn thành"];
   var statusRule = SpreadsheetApp.newDataValidation()
     .requireValueInList(statusList, true)
@@ -294,7 +307,15 @@ function onEdit(e) {
       rowRange.setVerticalAlignment("middle");
       rowRange.setFontSize(10);
       
-      // 2. Tự động gắn Dropdown 4 trạng thái nếu ô trạng thái (Cột H / Cột 8) chưa có
+      // 2. Đảm bảo Cột F (Hạn hoàn thành) là Date Picker sạch sẽ, không bị dính Dropdown trạng thái
+      var deadlineCell = sheet.getRange(editedRow, 6);
+      if (deadlineCell.getDataValidation() && deadlineCell.getDataValidation().getCriteriaType() === SpreadsheetApp.DataValidationCriteria.VALUE_IN_LIST) {
+        deadlineCell.clearDataValidations();
+        var dateRule = SpreadsheetApp.newDataValidation().requireDate().setAllowInvalid(true).build();
+        deadlineCell.setDataValidation(dateRule);
+      }
+
+      // 3. Tự động gắn Dropdown 4 trạng thái nếu ô trạng thái (Cột H / Cột 8) chưa có
       var statusCell = sheet.getRange(editedRow, 8);
       if (!statusCell.getDataValidation()) {
         var statusList = ["Chưa bắt đầu", "Đang thực hiện", "Đang sửa lại", "Đã hoàn thành"];
@@ -305,7 +326,7 @@ function onEdit(e) {
         statusCell.setDataValidation(statusRule);
       }
       
-      // 3. Nếu mới thêm task mà chưa chọn trạng thái, mặc định là "Đang thực hiện"
+      // 4. Nếu mới thêm task mà chưa chọn trạng thái, mặc định là "Đang thực hiện"
       if (!statusCell.getValue()) {
         statusCell.setValue("Đang thực hiện");
       }
@@ -603,10 +624,26 @@ function onOpen() {
  */
 function forceFixMisalignedColumns() {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Task_Tracker") || SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  
+  // 1. Xóa triệt để dropdown trạng thái bị gán nhầm trên Cột F (Hạn hoàn thành)
+  sheet.getRange("A8:G100").clearDataValidations();
+  sheet.getRange("I8:O100").clearDataValidations();
+  
+  // 2. Định dạng Date Picker sạch sẽ cho Cột F
+  var deadlineRange = sheet.getRange("F8:F100");
+  deadlineRange.setNumberFormat("yyyy-mm-dd");
+  var dateRule = SpreadsheetApp.newDataValidation()
+    .requireDate()
+    .setAllowInvalid(true)
+    .build();
+  deadlineRange.setDataValidation(dateRule);
+
+  // 3. Căn chỉnh dữ liệu và cập nhật toàn bộ format chuẩn
   alignExistingDataTo15Columns(sheet);
   setupHeadersAndFormatting();
+  
   try {
-    SpreadsheetApp.getUi().alert("✅ Đã căn chỉnh thành công tất cả các dòng dữ liệu vào đúng 15 cột mới!");
+    SpreadsheetApp.getUi().alert("✅ Đã xử lý triệt để: Xóa dropdown nhầm tại Cột F (Hạn hoàn thành), khôi phục Date Picker chuẩn và đồng bộ 15 cột thành công!");
   } catch (e) {
     Logger.log("Done");
   }
