@@ -321,28 +321,34 @@ class TaskAIAnalyzer:
         local_text = "\n\n--------------------\n\n".join(extracted_texts) if extracted_texts else ""
         regex_meta = self._extract_regex_metadata(local_text)
 
-        # 2. Xác định Task ID người dùng CHỈ ĐỊNH RÕ RÀNG (Explicit Target Task ID)
-        explicit_target_task_id = None
+        # 2. Xác định Task ID người dùng CHỈ ĐỊNH RÕ RÀNG (Explicit Target Task ID - hỗ trợ 1 hoặc nhiều Task)
+        explicit_target_task_ids = []
         if user_hint_text:
             clean_hint = user_hint_text.lower().strip()
-            # Bắt các cú pháp: nộp task 4, nop task 4, gửi task 4, task 4, t4, nv 4, #4
-            m_act = re.search(r'(?:nộp|nop|gửi|gui|cho|bài|bai)\s*(?:bài\s*)?(?:cho\s*)?(?:task|nhiệm\s*vụ|nv|stt|số|t)?\s*#?([0-9]{1,3})\b', clean_hint)
-            m_s = re.search(r'\b(?:task|t|nv)\s*#?([0-9]{1,3})\b', clean_hint)
-            m_single = re.match(r'^(?:#)?([0-9]{1,3})$', clean_hint)
-            if m_act:
-                explicit_target_task_id = m_act.group(1)
-            elif m_s:
-                explicit_target_task_id = m_s.group(1)
-            elif m_single:
-                explicit_target_task_id = m_single.group(1)
+            # Bắt dạng range 4-7 hoặc 4 - 7
+            m_range = re.search(r'(\d{1,3})\s*[\-–]\s*(\d{1,3})', clean_hint)
+            if m_range:
+                s_id, e_id = int(m_range.group(1)), int(m_range.group(2))
+                if 0 < s_id <= e_id and (e_id - s_id) <= 20:
+                    explicit_target_task_ids = [str(i) for i in range(s_id, e_id + 1)]
 
-        if not explicit_target_task_id:
+            if not explicit_target_task_ids:
+                nums = re.findall(r'\b\d{1,3}\b', clean_hint)
+                valid_nums = [n for n in nums if 0 < int(n) < 200]
+                seen = set()
+                for n in valid_nums:
+                    if n not in seen:
+                        seen.add(n)
+                        explicit_target_task_ids.append(n)
+
+        if not explicit_target_task_ids:
             for fn in filenames:
                 tid = self.extract_task_number_from_filename(fn)
                 if tid:
-                    explicit_target_task_id = tid
+                    explicit_target_task_ids = [tid]
                     break
 
+        explicit_target_task_id = explicit_target_task_ids[0] if explicit_target_task_ids else None
         target_task_id = str(explicit_target_task_id).strip() if explicit_target_task_id else ""
         target_task_name = ""
         target_assignee = assignee_name
@@ -652,6 +658,7 @@ TRẢ VỀ ĐỊNH DẠNG JSON DUY NHẤT:
                 if not proj_name and matched_target_task:
                     proj_name = matched_target_task.get("project") or self.extract_project_name(matched_target_task.get("taskName") or matched_target_task.get("task_name") or "")
                 data["project_name"] = proj_name
+                data["task_ids"] = explicit_target_task_ids if explicit_target_task_ids else ([current_task_id] if current_task_id else [])
                 return data
             except Exception as e:
                 last_error = str(e)
@@ -666,6 +673,7 @@ TRẢ VỀ ĐỊNH DẠNG JSON DUY NHẤT:
         return {
             "success": True,
             "task_id": hint_task_id,
+            "task_ids": explicit_target_task_ids if explicit_target_task_ids else ([hint_task_id] if hint_task_id else []),
             "status_decision": status,
             "deliverable": regex_meta.get("deliverable", "Công văn"),
             "document_number": regex_meta.get("document_number", ""),

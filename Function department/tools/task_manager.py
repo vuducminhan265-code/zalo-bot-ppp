@@ -220,57 +220,93 @@ class TaskManager:
 
     def scan_drive_folder(self, task_id: str) -> dict:
         """
-        Gửi yêu cầu tới Google Apps Script Webhook để quét Thư mục Google Drive (1j8C6PalsK_Z14-C88oKGy3u38OHuKRjL).
-        Tìm tệp PDF có tên bắt đầu bằng Task ID hoặc chứa Task ID.
-        Nếu tìm thấy, tải tệp về thư mục tạm và trả về {"success": True, "local_path": ..., "file_name": ...}.
+        Quét Thư mục Google Drive công khai của Phòng (1j8C6PalsK_Z14-C88oKGy3u38OHuKRjL).
+        Tìm tệp PDF theo định dạng '[task_id] - [Tên file] - [Tên chuyên viên].pdf'
+        Tải trực tiếp về thư mục tạm và trả về {"success": True, "local_path": ..., "file_name": ..., "file_id": ...}.
         """
-        webhook_url = self.webhook_url or os.getenv("GOOGLE_SHEETS_WEBHOOK_URL") or DEFAULT_WEBHOOK_URL
-        if not webhook_url:
-            return {"success": False, "error": "Chưa cấu hình GOOGLE_SHEETS_WEBHOOK_URL"}
+        import base64
+        import tempfile
+        import re
+        
+        target_id = str(task_id).strip()
+        folder_url = "https://drive.google.com/drive/folders/1j8C6PalsK_Z14-C88oKGy3u38OHuKRjL?usp=sharing"
 
+        # 1. Quét trực tiếp qua HTML Google Drive public folder (nhanh và chính xác tuyệt đối)
         try:
-            import base64
-            import tempfile
-            payload = {
-                "action": "scan_drive",
-                "taskId": str(task_id).strip(),
-                "folderId": "1j8C6PalsK_Z14-C88oKGy3u38OHuKRjL"
-            }
-            res = requests.post(webhook_url, data=json.dumps(payload), headers={'Content-Type': 'application/json'}, allow_redirects=False, timeout=35)
-            if res.status_code in [301, 302] and "Location" in res.headers:
-                res = requests.get(res.headers["Location"], timeout=35)
-            
-            if res.status_code == 200:
-                data = res.json()
-                if data.get("success") and data.get("files"):
-                    matching_file = data["files"][0]
-                    f_name = matching_file.get("name", f"task_{task_id}.pdf")
-                    f_id = matching_file.get("id")
-                    
-                    local_dir = tempfile.gettempdir()
-                    safe_fn = re.sub(r'[^a-zA-Z0-9_\-\.]', '_', f_name)
-                    local_path = os.path.join(local_dir, safe_fn)
-                    
-                    # 1. Ưu tiên giải mã Base64 tải trực tiếp
-                    if matching_file.get("base64"):
-                        pdf_bytes = base64.b64decode(matching_file["base64"])
-                        with open(local_path, "wb") as f_out:
-                            f_out.write(pdf_bytes)
-                        return {"success": True, "local_path": local_path, "file_name": f_name, "file_id": f_id}
-                    
-                    # 2. Tải qua Google Drive export URL
-                    dl_url = matching_file.get("downloadUrl") or f"https://drive.google.com/uc?export=download&id={f_id}"
-                    r_dl = requests.get(dl_url, timeout=35)
-                    if r_dl.status_code == 200 and len(r_dl.content) > 0:
-                        with open(local_path, "wb") as f_out:
-                            f_out.write(r_dl.content)
-                        return {"success": True, "local_path": local_path, "file_name": f_name, "file_id": f_id}
-                    
-                return {"success": False, "error": f"Không tìm thấy tệp PDF nào có định dạng '{task_id} - [Tên file] - [Tên chuyên viên]' trong Thư mục Google Drive."}
-        except Exception as e:
-            return {"success": False, "error": f"Lỗi kết nối quét Google Drive: {e}"}
+            req_folder = urllib.request.Request(folder_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+            with urllib.request.urlopen(req_folder, timeout=20) as resp:
+                html = resp.read().decode('utf-8')
+                
+                # Bóc tách tất cả các file PDF có trong thư mục: (Tên file, File ID)
+                # Google Drive render dạng aria-label="Tên_file.pdf PDF Shared" ... ssk='...:FILE_ID-0-16'
+                files = re.findall(r'aria-label="([^"]+?\.(?:pdf|PDF))\b[^"]*"[^>]*ssk=[\'"][^\'"]*?:([a-zA-Z0-9_\-]{28,35})', html)
+                
+                # Regex tìm tệp có số Task ID ở đầu:
+                # "4 - 24586 STC PPP.signed - Lộc.pdf", "4 - To trinh - Loc.pdf", "Task 4 - ...", "4_..."
+                task_regex = re.compile(rf'^(?:task\s*#?|nv\s*#?|t)?\s*{re.escape(target_id)}\s*([\-_–\s\.]|$)', re.IGNORECASE)
+                
+                matched = next(((fid.split('-')[0], fn.strip()) for fn, fid in files if task_regex.search(fn.strip())), None)
+                if matched:
+                    clean_fid, f_name = matched
+                    dl_url = f"https://drive.google.com/uc?export=download&id={clean_fid}"
+                    req_dl = urllib.request.Request(dl_url, headers={'User-Agent': 'Mozilla/5.0'})
+                    with urllib.request.urlopen(req_dl, timeout=35) as dl_resp:
+                        pdf_bytes = dl_resp.read()
+                        if len(pdf_bytes) > 0:
+                            local_dir = tempfile.gettempdir()
+                            safe_fn = re.sub(r'[^a-zA-Z0-9_\-\.]', '_', f_name)
+                            local_path = os.path.join(local_dir, safe_fn)
+                            with open(local_path, "wb") as f_out:
+                                f_out.write(pdf_bytes)
+                            return {
+                                "success": True,
+                                "local_path": local_path,
+                                "file_name": f_name,
+                                "file_id": clean_fid
+                            }
+        except Exception as e_direct:
+            sys.stderr.write(f"[WARN] Quét trực tiếp Google Drive folder lỗi: {e_direct}. Chuyển sang Webhook fallback.\n")
 
-        return {"success": False, "error": "Không thể kết nối đến Webhook Google Drive."}
+        # 2. Fallback: Gửi yêu cầu qua Webhook Google Apps Script nếu quét trực tiếp không thành công
+        webhook_url = self.webhook_url or os.getenv("GOOGLE_SHEETS_WEBHOOK_URL") or DEFAULT_WEBHOOK_URL
+        if webhook_url:
+            try:
+                payload = {
+                    "action": "scan_drive",
+                    "taskId": target_id,
+                    "folderId": "1j8C6PalsK_Z14-C88oKGy3u38OHuKRjL"
+                }
+                res = requests.post(webhook_url, data=json.dumps(payload), headers={'Content-Type': 'application/json'}, allow_redirects=False, timeout=35)
+                if res.status_code in [301, 302] and "Location" in res.headers:
+                    res = requests.get(res.headers["Location"], timeout=35)
+                
+                if res.status_code == 200:
+                    data = res.json()
+                    if data.get("success") and data.get("files"):
+                        matching_file = data["files"][0]
+                        f_name = matching_file.get("name", f"task_{target_id}.pdf")
+                        f_id = matching_file.get("id")
+                        
+                        local_dir = tempfile.gettempdir()
+                        safe_fn = re.sub(r'[^a-zA-Z0-9_\-\.]', '_', f_name)
+                        local_path = os.path.join(local_dir, safe_fn)
+                        
+                        if matching_file.get("base64"):
+                            pdf_bytes = base64.b64decode(matching_file["base64"])
+                            with open(local_path, "wb") as f_out:
+                                f_out.write(pdf_bytes)
+                            return {"success": True, "local_path": local_path, "file_name": f_name, "file_id": f_id}
+                        
+                        dl_url = matching_file.get("downloadUrl") or f"https://drive.google.com/uc?export=download&id={f_id}"
+                        r_dl = requests.get(dl_url, timeout=35)
+                        if r_dl.status_code == 200 and len(r_dl.content) > 0:
+                            with open(local_path, "wb") as f_out:
+                                f_out.write(r_dl.content)
+                            return {"success": True, "local_path": local_path, "file_name": f_name, "file_id": f_id}
+            except Exception as e_webhook:
+                sys.stderr.write(f"[WARN] Fallback Webhook scan_drive lỗi: {e_webhook}\n")
+
+        return {"success": False, "error": f"Không tìm thấy tệp PDF nào có định dạng '{target_id} - [Tên file] - [Tên chuyên viên]' trong Thư mục Google Drive."}
 
     def _get_all_tasks_from_local_excel(self) -> list:
         if not os.path.exists(self.excel_path):

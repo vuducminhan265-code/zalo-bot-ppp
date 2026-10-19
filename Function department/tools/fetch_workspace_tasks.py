@@ -143,25 +143,30 @@ class GoogleWorkspaceTaskFetcher:
         return report_msg, guide_msg
 
     def generate_guide_message(self) -> str:
-        drive_folder_url = "https://drive.google.com/drive/folders/1j8C6PalsK_Z14-C88oKGy3u38OHuKRjL?usp=drive_link"
+        drive_folder_url = "https://drive.google.com/drive/folders/1j8C6PalsK_Z14-C88oKGy3u38OHuKRjL?usp=sharing"
         guide_lines = [
             "📥 **HƯỚNG DẪN NỘP SẢN PHẨM & NGHIỆM THU TỰ ĐỘNG:**",
             "*(Hệ thống AI tự động đối soát thể thức Nghị định 30/2020/NĐ-CP, kiểm tra Tiêu ngữ, Số ký hiệu, Trích yếu, Chữ ký lưu và cập nhật trực tiếp lên Google Sheets)*",
             "",
-            "1️⃣ **CÁCH 1: NỘP BẰNG HÌNH ẢNH QUA ZALO (HỖ TRỢ 2 TÙY CHỌN LINH HOẠT)**",
-            "• **Bước 1**: Nhắn tin vào nhóm: `Nộp task [số]` (Ví dụ: `Nộp task 4`, `Nộp task 2`).",
+            "1️⃣ **CÁCH 1: NỘP BẰNG HÌNH ẢNH QUA ZALO (HỖ TRỢ NỘP ĐƠN HOẶC NHIỀU TASK CÙNG LÚC)**",
+            "• **Bước 1**: Nhắn tin vào nhóm cú pháp nộp:",
+            "   🔹 Nộp 1 task: `Nộp task 4` (hoặc `nộp 4`)",
+            "   🔹 Nộp nhiều task liên quan cùng lúc: `Nộp task 4 5 6 7` (hoặc `Nộp task 4-7`, `Nộp task 4, 5, 6`)",
             "• **Bước 2**: Chuyên viên lựa chọn 1 trong 2 hình thức gửi ảnh thuận tiện:",
             "   🔹 **Tùy chọn 1A - Nộp từng ảnh rời (An toàn, chống sót trang)**: Gửi ảnh Trang 1 (có Tiêu ngữ, Số ký hiệu, Trích yếu) ➔ Hệ thống lập tức phản hồi đã nhận và đệm chờ 6 giây để Anh/Chị gửi tiếp Trang cuối (có Nơi nhận, Ký hiệu lưu vết, Chữ ký). Sau khi nhận đủ sẽ tự động tổng hợp đối soát.",
             "   🔹 **Tùy chọn 1B - Nộp gom một thể (Nhanh gọn)**: Chọn và gửi cùng lúc tất cả các trang ảnh văn bản (Album / Multi-select). Hệ thống tự động gom toàn bộ ảnh nhận được trong một lượt, tự phân định đâu là trang đầu, đâu là trang cuối để thẩm định.",
             "",
-            "2️⃣ **CÁCH 2: NỘP VĂN BẢN PDF CHẤT LƯỢNG CAO QUA GOOGLE DRIVE**",
-            "• **Bước 1**: Tải tệp PDF sản phẩm vào Thư mục Google Drive dùng chung của Phòng:",
+            "2️⃣ **CÁCH 2: NỘP VĂN BẢN PDF CHẤT LƯỢNG CAO QUA GOOGLE DRIVE (HỖ TRỢ NỘP NHIỀU TASK)**",
+            "• **Bước 1**: Tải tệp PDF sản phẩm vào Thư mục Google Drive công khai của Phòng:",
             f"  🔗 {drive_folder_url}",
-            "• **Đặt tên tệp chuẩn**: `[Số ID Task] - [Tên file / Loại văn bản] - [Tên chuyên viên].pdf`",
-            "  *(Lưu ý: Tên chuyên viên có thể ghi ngắn gọn như: Lộc, Hòa, Giang, Phúc... không cần họ tên đầy đủ rườm rà; quan trọng nhất là SỐ ĐẦU TIÊN phải khớp đúng với ID Task cần nộp)*.",
-            "  *Ví dụ: `4 - To trinh - Loc.pdf` hoặc `4 - File - Tên chuyên viên.pdf` hoặc `4 - Công văn - Lộc.pdf`*.",
-            "• **Bước 2**: Nhắn vào chat Zalo cú pháp: `nộp task [số] pdf` (Ví dụ: `nộp task 4 pdf`).",
-            "  *(AI sẽ tự động quét Google Drive tìm đúng tệp có số ID tương ứng, tải PDF về đối soát thể thức Nghị định 30/2020/NĐ-CP và cập nhật Bảng giao việc)*.",
+            "• **Định dạng đặt tên tệp chuẩn**:",
+            "   `[Số ID Task] - [Tên file / Loại văn bản] - [Tên chuyên viên].pdf`",
+            "   *(Lưu ý: Tên chuyên viên có thể ghi ngắn gọn như: Lộc, Hòa, Giang, Phúc... không cần họ tên đầy đủ rườm rà; quan trọng nhất là SỐ ĐẦU TIÊN phải khớp đúng với ID Task cần nộp)*.",
+            "   *Ví dụ: `4 - file - tên chuyên viên.pdf`, `4 - To trinh - Loc.pdf` hoặc `4 - Công văn - Lộc.pdf`*.",
+            "• **Bước 2**: Nhắn vào chat Zalo cú pháp nộp PDF:",
+            "   🔹 Nộp 1 task: `nộp task 4 pdf` (hoặc `task 4 drive`)",
+            "   🔹 Nộp nhiều task cùng lúc: `nộp task 4 5 6 7 pdf` (hoặc `nộp task 4-7 pdf`, `task 4 5 6 drive`)",
+            "  *(AI sẽ tự động quét Google Drive tìm tất cả các tệp có số ID tương ứng, tải từng PDF về đối soát thể thức Nghị định 30/2020/NĐ-CP và cập nhật Bảng giao việc)*.",
             "",
             "📌 **Tra cứu nhanh nhiệm vụ:**",
             "  👉 Gõ `task [số]` (Ví dụ: `task 4` hoặc `xem task 4`) để xem đầy đủ thông tin nhiệm vụ, dự án, hạn hoàn thành và kết quả thẩm định."

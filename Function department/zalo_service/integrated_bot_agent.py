@@ -184,33 +184,44 @@ class IntegratedZaloBotAgent:
                     ai_comment = review_res.get("ai_review_comment", "")
                     discrepancy = review_res.get("discrepancy_reason", "")
 
-                    if status_decision == "completed":
-                        # Tự động cập nhật Google Sheets: Đã hoàn thành
-                        sheets_updated = False
-                        if self.task_manager and task_id:
-                            try:
-                                sheets_updated = self.task_manager.update_task_status_and_metadata(
-                                    task_id=task_id,
-                                    status="Đã hoàn thành",
-                                    summary=ai_comment or f"{deliverable} số {doc_number} ngày {doc_date}: {actual_summary}",
-                                    file_name=file_name,
-                                    doc_number=doc_number,
-                                    doc_date=doc_date,
-                                    actual_summary=actual_summary,
-                                    deliverable=deliverable,
-                                    project=review_res.get("project_name", "")
-                                )
-                            except Exception as e:
-                                print(f"⚠️ Lỗi update Google Sheets: {e}", flush=True)
+                    task_ids = review_res.get("task_ids") or ([task_id] if task_id else [])
+                    ids_display = f"#{', #'.join(task_ids)}" if task_ids else f"#{task_id}"
 
-                        sheets_status_text = 'ĐÃ TỰ ĐỘNG CẬP NHẬT TRẠNG THÁI "ĐÃ HOÀN THÀNH" 🟢' if sheets_updated else 'Đã thẩm định hoàn thành đạt chuẩn 🟢'
+                    if status_decision == "completed":
+                        # Tự động cập nhật Google Sheets: Đã hoàn thành (hỗ trợ 1 hoặc nhiều task)
+                        updated_count = 0
+                        if self.task_manager and task_ids:
+                            for tid in task_ids:
+                                try:
+                                    ok = self.task_manager.update_task_status_and_metadata(
+                                        task_id=tid,
+                                        status="Đã hoàn thành",
+                                        summary=ai_comment or f"{deliverable} số {doc_number} ngày {doc_date}: {actual_summary}",
+                                        file_name=file_name,
+                                        doc_number=doc_number,
+                                        doc_date=doc_date,
+                                        actual_summary=actual_summary,
+                                        deliverable=deliverable,
+                                        project=review_res.get("project_name", "")
+                                    )
+                                    if ok: updated_count += 1
+                                except Exception as e:
+                                    print(f"⚠️ Lỗi update Google Sheets Task {tid}: {e}", flush=True)
+
+                        if len(task_ids) > 1:
+                            sheets_status_text = f'ĐÃ TỰ ĐỘNG CẬP NHẬT TRẠNG THÁI "ĐÃ HOÀN THÀNH" CHO {len(task_ids)} NHIỆM VỤ ({ids_display}) 🟢'
+                            doi_soat_text = f"Khớp chuỗi nhiệm vụ Task {ids_display} (Phụ trách: {assigned_staff})"
+                        else:
+                            sheets_status_text = 'ĐÃ TỰ ĐỘNG CẬP NHẬT TRẠNG THÁI "ĐÃ HOÀN THÀNH" 🟢' if updated_count > 0 else 'Đã thẩm định hoàn thành đạt chuẩn 🟢'
+                            doi_soat_text = f"Khớp chuẩn Task #{task_id} (Phụ trách: {assigned_staff})"
+
                         initials_text = f"{recipient_initials} (Khớp chuyên viên: {assigned_staff})" if recipient_initials else f"Khớp chuyên viên: {assigned_staff}"
                         page_structure = review_res.get("page_structure_text", "")
                         resp = [
                             "✅ [KẾT QUẢ THẨM ĐỊNH & NGHIỆM THU TỰ ĐỘNG - PHÒNG PPP]",
                             f"👤 Người nộp: {sender_name}",
                             f"📄 Tệp văn bản: {file_name}",
-                            f"🔢 Đối soát: Khớp chuẩn Task #{task_id} (Phụ trách: {assigned_staff})"
+                            f"🔢 Đối soát: {doi_soat_text}"
                         ]
                         if page_structure:
                             resp.append(f"📑 Cấu trúc ảnh nhận diện:\n{page_structure}")
@@ -228,26 +239,28 @@ class IntegratedZaloBotAgent:
                         ])
                         return "\n".join(resp)
                     else:
-                        # Tự động cập nhật Google Sheets: Đang sửa lại (nếu có task_id)
-                        sheets_updated = False
-                        if self.task_manager and task_id:
-                            try:
-                                err_brief = "; ".join([e.replace('❌ ', '') for e in validation_errors[:2]]) if validation_errors else (discrepancy or "Cần hoàn thiện thể thức")
-                                sheets_updated = self.task_manager.update_task_status_and_metadata(
-                                    task_id=task_id,
-                                    status="Đang sửa lại",
-                                    summary=f"CẢNH BÁO SAI LỆCH: {err_brief}",
-                                    file_name=file_name,
-                                    doc_number=doc_number,
-                                    doc_date=doc_date,
-                                    actual_summary=actual_summary,
-                                    deliverable=deliverable,
-                                    project=review_res.get("project_name", "")
-                                )
-                            except Exception as e:
-                                print(f"⚠️ Lỗi update Google Sheets: {e}", flush=True)
+                        # Tự động cập nhật Google Sheets: Đang sửa lại (hỗ trợ 1 hoặc nhiều task)
+                        updated_count = 0
+                        err_brief = "; ".join([e.replace('❌ ', '') for e in validation_errors[:2]]) if validation_errors else (discrepancy or "Cần hoàn thiện thể thức")
+                        if self.task_manager and task_ids:
+                            for tid in task_ids:
+                                try:
+                                    ok = self.task_manager.update_task_status_and_metadata(
+                                        task_id=tid,
+                                        status="Đang sửa lại",
+                                        summary=f"CẢNH BÁO SAI LỆCH: {err_brief}",
+                                        file_name=file_name,
+                                        doc_number=doc_number,
+                                        doc_date=doc_date,
+                                        actual_summary=actual_summary,
+                                        deliverable=deliverable,
+                                        project=review_res.get("project_name", "")
+                                    )
+                                    if ok: updated_count += 1
+                                except Exception as e:
+                                    print(f"⚠️ Lỗi update Google Sheets Task {tid}: {e}", flush=True)
 
-                        sheets_warning_text = 'ĐÃ GHI NHẬN CẢNH BÁO "ĐANG SỬA LẠI" 🔴' if sheets_updated else 'Trạng thái: Đang sửa lại 🔴'
+                        sheets_warning_text = f'ĐÃ GHI NHẬN CẢNH BÁO "ĐANG SỬA LẠI" CHO {ids_display} 🔴' if updated_count > 0 else 'Trạng thái: Đang sửa lại 🔴'
                         
                         err_items = []
                         if validation_errors:

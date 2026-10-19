@@ -104,12 +104,14 @@ def process_buffered_images(chat_id: str, sender_name: str, bot_key: str):
     filenames = batch.get("filenames", [])
     user_hint = batch.get("user_text", "")
     
-    # 1. Kiểm tra nếu chuyên viên đã bấm "Nộp task [số]" trước khi gửi ảnh
+    # 1. Kiểm tra nếu chuyên viên đã bấm "Nộp task [số]" hoặc nhiều task trước khi gửi ảnh
     pending_sub = PENDING_TASK_SUBMISSIONS.pop(chat_id, None)
     if pending_sub and (time.time() - pending_sub.get("time", 0)) < 300: # Trong vòng 5 phút
-        t_id = pending_sub.get("task_id")
-        if t_id and f"task {t_id}" not in user_hint.lower():
-            user_hint = f"nộp task {t_id} {user_hint}".strip()
+        t_ids = pending_sub.get("task_ids") or ([pending_sub["task_id"]] if "task_id" in pending_sub else [])
+        if t_ids:
+            tasks_str = " ".join(t_ids)
+            if not any(f"task {tid}" in user_hint.lower() for tid in t_ids):
+                user_hint = f"nộp task {tasks_str} {user_hint}".strip()
 
     rec = RECENT_USER_TEXTS.get(chat_id)
     if rec and (time.time() - rec.get("time", 0)) < 180:
@@ -140,32 +142,65 @@ def process_buffered_images(chat_id: str, sender_name: str, bot_key: str):
             except Exception:
                 pass
 
-def extract_task_submission_intent(text: str):
+def extract_task_submission_intents(text: str) -> list:
     """
-    Nhận diện các biến thể CHỈ ĐỊNH NỘP BÀI:
-    - nộp task 4, Nộp task 4, nop task 4, Nop task 4, nop 4, nộp 4
-    - nộp bài task 4, nop bai task 4, bài task 4, cho task 4, nộp cho task 4, gửi task 4
+    Nhận diện các biến thể CHỈ ĐỊNH NỘP BÀI (Hỗ trợ 1 hoặc NHIỀU Task ID):
+    - nộp task 4, Nộp task 4 5 6, nop task 4-7, nộp bài task 4, 5, nộp 4 5
     """
     if not text:
-        return None
+        return []
     clean = text.lower().strip()
-    m_action = re.search(r'(?:nộp|nop|gửi|gui|cho|bài|bai)\s*(?:bài\s*)?(?:cho\s*)?(?:task|nhiệm\s*vụ|nv|stt|số|t)?\s*#?([0-9]{1,3})\b', clean)
-    if m_action:
-        return m_action.group(1)
-    return None
+    if any(k in clean for k in ["pdf", "drive"]):
+        return []
+    if not any(k in clean for k in ["nộp", "nop", "gửi", "gui", "bài", "bai", "task"]):
+        return []
 
-def extract_drive_pdf_intent(text: str):
+    m_range = re.search(r'(\d{1,3})\s*[\-–]\s*(\d{1,3})', clean)
+    if m_range:
+        start_id = int(m_range.group(1))
+        end_id = int(m_range.group(2))
+        if 0 < start_id <= end_id and (end_id - start_id) <= 20:
+            return [str(i) for i in range(start_id, end_id + 1)]
+
+    nums = re.findall(r'\b\d{1,3}\b', clean)
+    valid_nums = [n for n in nums if 0 < int(n) < 200]
+    seen = set()
+    res = []
+    for n in valid_nums:
+        if n not in seen:
+            seen.add(n)
+            res.append(n)
+    return res
+
+def extract_drive_pdf_intents(text: str) -> list:
     """
-    Nhận diện lệnh nộp PDF qua Google Drive:
-    - nộp task 4 pdf, task 4 pdf, nop task 4 pdf, task 4 drive, nộp task 4 drive, 4 pdf
+    Nhận diện lệnh nộp PDF qua Google Drive (Hỗ trợ 1 hoặc NHIỀU Task ID):
+    - nộp task 4 pdf, Nộp task 4 5 6 7 pdf, nop task 4, 5, 6 pdf, task 4-7 drive
     """
     if not text:
-        return None
+        return []
     clean = text.lower().strip()
-    m_pdf = re.search(r'(?:nộp|nop|gửi|gui)?\s*(?:task|nv|t)?\s*#?([0-9]{1,3})\s*(?:pdf|drive)\b', clean)
-    if m_pdf:
-        return m_pdf.group(1)
-    return None
+    if not any(k in clean for k in ["pdf", "drive"]):
+        return []
+    if not any(k in clean for k in ["nộp", "nop", "gửi", "gui", "task", "nv", "t"]):
+        return []
+
+    m_range = re.search(r'(\d{1,3})\s*[\-–]\s*(\d{1,3})', clean)
+    if m_range:
+        start_id = int(m_range.group(1))
+        end_id = int(m_range.group(2))
+        if 0 < start_id <= end_id and (end_id - start_id) <= 20:
+            return [str(i) for i in range(start_id, end_id + 1)]
+
+    nums = re.findall(r'\b\d{1,3}\b', clean)
+    valid_nums = [n for n in nums if 0 < int(n) < 200]
+    seen = set()
+    res = []
+    for n in valid_nums:
+        if n not in seen:
+            seen.add(n)
+            res.append(n)
+    return res
 
 def extract_task_view_intent(text: str):
     """
@@ -530,7 +565,8 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
 
             total_received = len(USER_IMAGE_BATCH[str_chat_id]["files"])
             pending_sub = PENDING_TASK_SUBMISSIONS.get(str_chat_id)
-            task_label = f" cho Task #{pending_sub['task_id']}" if pending_sub else ""
+            t_ids = pending_sub.get("task_ids") or ([pending_sub["task_id"]] if pending_sub and "task_id" in pending_sub else [])
+            task_label = f" cho Task #{', #'.join(t_ids)}" if t_ids else ""
 
             # PHÂN ĐỊNH 2 CÁCH NỘP HÌNH ẢNH:
             if is_new_batch and len(downloaded_files) == 1:
@@ -645,53 +681,91 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
                 t.start()
                 return
 
-        # 5.1. Nộp tệp PDF qua Thư mục Google Drive của Phòng
-        pdf_task_id = extract_drive_pdf_intent(clean_text)
-        if pdf_task_id:
-            send_zalo_message(chat_id, f"🔍 Đang quét Thư mục Google Drive của Phòng để tìm tệp PDF cho Task #{pdf_task_id}...", bot_key=bot_key)
-            res_drive = bot_agent.task_manager.scan_drive_folder(pdf_task_id) if (bot_agent.task_manager and hasattr(bot_agent.task_manager, 'scan_drive_folder')) else {"success": False, "error": "Chưa hỗ trợ scan drive"}
-            if res_drive.get("success"):
-                local_pdf = res_drive.get("local_path")
-                fn_pdf = res_drive.get("file_name", f"task_{pdf_task_id}.pdf")
-                send_zalo_message(chat_id, f"📥 Đã tìm thấy tệp `{fn_pdf}` trên Google Drive. Đang tiến hành thẩm định thể thức tự động theo Nghị định 30/2020/NĐ-CP...", bot_key=bot_key)
-                review_ans = bot_agent.process_message(
-                    user_text=f"Nộp task {pdf_task_id}",
-                    sender_name=sender_name,
-                    file_attachment_path=local_pdf
-                )
-                send_zalo_message(chat_id, review_ans, bot_key=bot_key)
-                if os.path.exists(local_pdf):
-                    try: os.remove(local_pdf)
-                    except Exception: pass
-                return
+        # 5.1. Nộp tệp PDF qua Thư mục Google Drive của Phòng (hỗ trợ 1 hoặc nhiều task: 4, 4 5 6, 4-7...)
+        pdf_task_ids = extract_drive_pdf_intents(clean_text)
+        if pdf_task_ids:
+            if len(pdf_task_ids) == 1:
+                pid = pdf_task_ids[0]
+                send_zalo_message(chat_id, f"🔍 Đang quét Thư mục Google Drive của Phòng để tìm tệp PDF cho Task #{pid}...", bot_key=bot_key)
+                res_drive = bot_agent.task_manager.scan_drive_folder(pid) if (bot_agent.task_manager and hasattr(bot_agent.task_manager, 'scan_drive_folder')) else {"success": False, "error": "Chưa hỗ trợ scan drive"}
+                if res_drive.get("success"):
+                    local_pdf = res_drive.get("local_path")
+                    fn_pdf = res_drive.get("file_name", f"task_{pid}.pdf")
+                    send_zalo_message(chat_id, f"📥 Đã tìm thấy tệp `{fn_pdf}` trên Google Drive. Đang tiến hành thẩm định thể thức tự động theo Nghị định 30/2020/NĐ-CP...", bot_key=bot_key)
+                    review_ans = bot_agent.process_message(
+                        user_text=f"Nộp task {pid}",
+                        sender_name=sender_name,
+                        file_attachment_path=local_pdf
+                    )
+                    send_zalo_message(chat_id, review_ans, bot_key=bot_key)
+                    if os.path.exists(local_pdf):
+                        try: os.remove(local_pdf)
+                        except Exception: pass
+                    return
+                else:
+                    err_drive = res_drive.get("error", "Không tìm thấy tệp")
+                    fail_msg = (
+                        f"⚠️ **Thông báo kết quả quét Google Drive cho Task #{pid}:**\n\n"
+                        f"• {err_drive}\n\n"
+                        f"🔗 **Đường dẫn Thư mục Google Drive của Phòng:**\n"
+                        f"https://drive.google.com/drive/folders/1j8C6PalsK_Z14-C88oKGy3u38OHuKRjL?usp=sharing\n\n"
+                        f"👉 **Hướng dẫn đặt tên tệp chuẩn:**\n"
+                        f"1. Tải tệp PDF lên Thư mục Drive trên, đặt tên theo cấu trúc:\n"
+                        f"   `{pid} - [Tên file / Loại văn bản] - [Tên chuyên viên].pdf`\n"
+                        f"   *(Lưu ý: Tên chuyên viên chỉ cần ghi ngắn gọn như: Lộc, Hòa, Giang, Phúc... không cần họ tên đầy đủ rườm rà. Quan trọng nhất là số `{pid}` ở đầu tiên khớp với ID Task cần nộp)*.\n"
+                        f"   *Ví dụ: `{pid} - To trinh - Loc.pdf` hoặc `{pid} - File - Tên chuyên viên.pdf` hoặc `{pid} - Công văn - Lộc.pdf`*\n"
+                        f"2. Nhắn lại vào nhóm: `nộp task {pid} pdf` để AI đối soát và cập nhật hoàn thành!"
+                    )
+                    send_zalo_message(chat_id, fail_msg, bot_key=bot_key)
+                    return
             else:
-                err_drive = res_drive.get("error", "Không tìm thấy tệp")
-                fail_msg = (
-                    f"⚠️ **Thông báo kết quả quét Google Drive cho Task #{pdf_task_id}:**\n\n"
-                    f"• {err_drive}\n\n"
-                    f"🔗 **Đường dẫn Thư mục Google Drive của Phòng:**\n"
-                    f"https://drive.google.com/drive/folders/1j8C6PalsK_Z14-C88oKGy3u38OHuKRjL?usp=drive_link\n\n"
-                    f"👉 **Hướng dẫn đặt tên tệp chuẩn:**\n"
-                    f"1. Tải tệp PDF lên Thư mục Drive trên, đặt tên theo cấu trúc:\n"
-                    f"   `{pdf_task_id} - [Tên file / Loại văn bản] - [Tên chuyên viên].pdf`\n"
-                    f"   *(Lưu ý: Tên chuyên viên chỉ cần ghi ngắn gọn như: Lộc, Hòa, Giang, Phúc... không cần họ tên đầy đủ rườm rà. Quan trọng nhất là số `{pdf_task_id}` ở đầu tiên khớp với ID Task cần nộp)*.\n"
-                    f"   *Ví dụ: `{pdf_task_id} - To trinh - Loc.pdf` hoặc `{pdf_task_id} - File - Tên chuyên viên.pdf` hoặc `{pdf_task_id} - Công văn - Lộc.pdf`*\n"
-                    f"2. Nhắn lại vào nhóm: `nộp task {pdf_task_id} pdf` để AI đối soát và cập nhật hoàn thành!"
-                )
-                send_zalo_message(chat_id, fail_msg, bot_key=bot_key)
+                # Nộp hàng loạt nhiều task qua Drive: ví dụ "nộp task 4 5 6 7 pdf" hoặc "task 4-7 pdf"
+                send_zalo_message(chat_id, f"🔍 Đang quét Thư mục Google Drive của Phòng để tìm các tệp PDF cho {len(pdf_task_ids)} nhiệm vụ: Task #{', #'.join(pdf_task_ids)}...", bot_key=bot_key)
+                missing_pids = []
+                for pid in pdf_task_ids:
+                    res_drive = bot_agent.task_manager.scan_drive_folder(pid) if (bot_agent.task_manager and hasattr(bot_agent.task_manager, 'scan_drive_folder')) else {"success": False, "error": "Chưa hỗ trợ scan drive"}
+                    if res_drive.get("success"):
+                        local_pdf = res_drive.get("local_path")
+                        fn_pdf = res_drive.get("file_name", f"task_{pid}.pdf")
+                        send_zalo_message(chat_id, f"📥 [Task #{pid}] Đã tìm thấy tệp `{fn_pdf}`. Đang tiến hành thẩm định và nghiệm thu...", bot_key=bot_key)
+                        review_ans = bot_agent.process_message(
+                            user_text=f"Nộp task {pid}",
+                            sender_name=sender_name,
+                            file_attachment_path=local_pdf
+                        )
+                        send_zalo_message(chat_id, review_ans, bot_key=bot_key)
+                        if os.path.exists(local_pdf):
+                            try: os.remove(local_pdf)
+                            except Exception: pass
+                    else:
+                        missing_pids.append(pid)
+                
+                if missing_pids:
+                    missing_msg = (
+                        f"⚠️ **Thông báo các Task chưa tìm thấy tệp PDF trên Google Drive: Task #{', #'.join(missing_pids)}**\n\n"
+                        f"🔗 **Đường dẫn Thư mục Google Drive của Phòng:**\n"
+                        f"https://drive.google.com/drive/folders/1j8C6PalsK_Z14-C88oKGy3u38OHuKRjL?usp=sharing\n\n"
+                        f"👉 **Hướng dẫn đặt tên tệp chuẩn:**\n"
+                        f"Tải tệp PDF lên Drive với định dạng: `[Số Task] - [Tên file] - [Tên chuyên viên].pdf`\n"
+                        f"*(Ví dụ: `{missing_pids[0]} - To trinh - {sender_name}.pdf`)*\n"
+                        f"Sau đó gõ lại: `nộp task {' '.join(missing_pids)} pdf` để nghiệm thu nốt các nhiệm vụ còn lại!"
+                    )
+                    send_zalo_message(chat_id, missing_msg, bot_key=bot_key)
                 return
 
-        # 5.2. Nhận diện hành động CHỈ ĐỊNH NỘP BÀI (nộp task 4, nop task 4, gửi task 4, nộp 4...)
-        sub_id = extract_task_submission_intent(clean_text)
-        if sub_id:
-            PENDING_TASK_SUBMISSIONS[str_chat_id] = {"task_id": sub_id, "time": time.time()}
+        # 5.2. Nhận diện hành động CHỈ ĐỊNH NỘP BÀI (Hỗ trợ nộp 1 hoặc nhiều task cùng lúc: nộp task 4, nộp task 4 5 6, nộp task 4-6...)
+        sub_ids = extract_task_submission_intents(clean_text)
+        if sub_ids:
+            PENDING_TASK_SUBMISSIONS[str_chat_id] = {"task_ids": sub_ids, "task_id": sub_ids[0], "time": time.time()}
             RECENT_USER_TEXTS[str_chat_id] = {"text": raw_text, "time": time.time()}
+            ids_label = f"Task #{', #'.join(sub_ids)}"
+            
             submission_prompt = (
-                f"📌 **Đã sẵn sàng tiếp nhận sản phẩm cho Task #{sub_id} từ chuyên viên {sender_name}:**\n\n"
+                f"📌 **Đã sẵn sàng tiếp nhận sản phẩm cho {ids_label} từ chuyên viên {sender_name}:**\n\n"
                 f"👉 **Anh/Chị có thể chọn 1 trong 2 cách nộp hình ảnh sau:**\n"
                 f"• **Cách 1A (Nộp từng ảnh lẻ)**: Gửi ảnh Trang 1 (Tiêu ngữ, Số, Trích yếu) ➔ Hệ thống sẽ xác nhận và đợi 6 giây để Anh/Chị gửi tiếp Trang cuối (Nơi nhận, Chữ ký).\n"
                 f"• **Cách 1B (Nộp gom một thể)**: Chọn và gửi cùng lúc tất cả các trang ảnh văn bản (Album / Multi-select) để AI tự động gom và đối soát toàn bộ.\n\n"
-                f"*(Hoặc nộp PDF: Tải tệp lên Google Drive đặt tên `{sub_id} - [Tên file] - [Tên chuyên viên ngắn gọn].pdf` rồi gõ `nộp task {sub_id} pdf`)*"
+                f"*(Hoặc nộp qua Google Drive: Tải tệp PDF lên Drive đặt tên `{sub_ids[0]} - [Tên file] - [Tên chuyên viên].pdf` rồi gõ `nộp task {' '.join(sub_ids)} pdf`)*"
             )
             send_zalo_message(chat_id, submission_prompt, bot_key=bot_key)
             return
