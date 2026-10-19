@@ -21,109 +21,14 @@
  */
 
 function alignExistingDataTo15Columns(sheet) {
-  if (!sheet) {
-    sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Task_Tracker") || SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  }
-  var lastRow = sheet.getLastRow();
-  if (lastRow < 8) return;
-  
-  var numRows = Math.min(lastRow - 7, 95);
-  var dataRange = sheet.getRange(8, 1, numRows, 15);
-  var values = dataRange.getValues();
-  var modified = false;
-  
-  // Danh sách từ khóa chuyên viên và sản phẩm để nhận diện chính xác hàng bị lệch 13 cột
-  var staffKeywords = ["hòa", "lộc", "giang", "phúc", "ngọc", "khoa", "thoa", "hoàng", "tú", "nam", "vũ", "phượng", "phương", "trang", "vinh", "hận"];
-  var deliverableKeywords = ["công văn", "tờ trình", "báo cáo", "kết luận", "phiếu trình", "văn bản nội bộ"];
-  
-  for (var i = 0; i < values.length; i++) {
-    var row = values[i];
-    var taskId = String(row[0] || "").trim();
-    if (!taskId) continue;
-    
-    // Dấu hiệu hàng đang bị lệch theo kiểu cũ 13 cột:
-    // 1. Cột C (row[2]) chứa tên chuyên viên
-    // 2. Cột D (row[3]) chứa ngày hạn hoàn thành (Date hoặc chuỗi '2026-' / '/')
-    // 3. Cột F (row[5]) chứa trạng thái ("Đang thực hiện", "Đã hoàn thành", "Đang sửa lại")
-    // 4. Cột G (row[6]) chứa sản phẩm ("Công văn", "Tờ trình"...)
-    var colC_val = String(row[2] || "").toLowerCase().trim();
-    var colD_val = row[3];
-    var colF_val = String(row[5] || "").toLowerCase().trim();
-    var colG_val = String(row[6] || "").toLowerCase().trim();
-    
-    var isOldLayout = false;
-    if (colD_val instanceof Date) {
-      isOldLayout = true;
-    } else if (typeof colD_val === "string" && (colD_val.indexOf("202") !== -1 || colD_val.indexOf("/") !== -1)) {
-      isOldLayout = true;
-    } else if (colF_val.indexOf("thực hiện") !== -1 || colF_val.indexOf("hoàn thành") !== -1 || colF_val.indexOf("sửa lại") !== -1) {
-      isOldLayout = true;
-    } else if (staffKeywords.some(function(k) { return colC_val.indexOf(k) !== -1; })) {
-      isOldLayout = true;
-    } else if (deliverableKeywords.some(function(k) { return colG_val.indexOf(k) !== -1; })) {
-      isOldLayout = true;
-    }
-    
-    if (isOldLayout) {
-      modified = true;
-      var taskName = row[1];
-      var assignee = row[2];
-      var deadline = row[3];
-      var priority = row[4];
-      var status = row[5];
-      var deliverable = row[6];
-      var trichYeu = row[7];
-      var soKyHieu = row[8];
-      var ngayBanHanh = row[9];
-      var aiSummary = row[10];
-      var submittedAt = row[11];
-      var fileName = row[12];
-      
-      // Tự động bóc tách tên Dự án chuẩn xác từ Task Name hoặc Trích yếu
-      var project = "";
-      var textToScan = (trichYeu || taskName || "") + "";
-      var m = textToScan.match(/(Dự\s*án(?:\s+thành\s+phần\s+\d+)?\s*[:\-\–]?\s*[\w\s\d,–\-\(\)\/\.\+]+?)(?=\s+theo\s+phương\s+thức|\s+thuộc\s+dự\s+án|\s+tại\s+|\s+của\s+công\s+ty|\s*\(Hợp\s*đồng|$)/i);
-      if (m) {
-        project = m[1].trim();
-      } else {
-        var mFallback = textToScan.match(/(Dự\s*án[^\.\n\r]+)/i);
-        if (mFallback) project = mFallback[1].trim();
-      }
-      
-      // Căn chỉnh vào đúng 15 cột mới:
-      // A (0): Task ID | B (1): Tên nhiệm vụ | C (2): Dự án | D (3): Người phụ trách | E (4): Lãnh đạo phòng
-      // F (5): Hạn hoàn thành | G (6): Mức độ ưu tiên | H (7): Trạng thái | I (8): Sản phẩm | J (9): Trích yếu
-      // K (10): Số ký hiệu | L (11): Ngày ban hành | M (12): Đánh giá AI | N (13): Thời gian nộp | O (14): Tên file
-      values[i][0] = taskId;
-      values[i][1] = taskName;
-      values[i][2] = project;
-      values[i][3] = assignee;
-      values[i][4] = "";
-      values[i][5] = deadline;
-      values[i][6] = priority;
-      values[i][7] = status;
-      values[i][8] = deliverable;
-      values[i][9] = trichYeu;
-      values[i][10] = soKyHieu;
-      values[i][11] = ngayBanHanh;
-      values[i][12] = aiSummary;
-      values[i][13] = submittedAt;
-      values[i][14] = fileName;
-    }
-  }
-  
-  if (modified) {
-    dataRange.setValues(values);
-    Logger.log("✅ Đã tự động dịch chuyển và căn chỉnh các hàng dữ liệu cũ sang đúng 15 cột mới!");
-  }
+  // Hàm này đã được vô hiệu hóa để bảo vệ an toàn tuyệt đối 100% dữ liệu của chuyên viên,
+  // tránh việc tự động xáo trộn hoặc dịch chuyển cột sai lệch.
+  Logger.log("ℹ️ Dữ liệu đã được bảo toàn nguyên vẹn.");
 }
 
 function setupHeadersAndFormatting() {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Task_Tracker") || SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   sheet.setFrozenRows(7); // Khóa cố định từ dòng 7 trở lên (Dashboard & Headers)
-  
-  // Tự động căn chỉnh dữ liệu cũ nếu phát hiện đang bị lệch cột
-  alignExistingDataTo15Columns(sheet);
   
   // 1. Cấu hình độ rộng 15 cột chuẩn thẩm mỹ công sở
   var columnWidths = {
@@ -149,7 +54,6 @@ function setupHeadersAndFormatting() {
   }
   
   // 2. Định dạng Dashboard thống kê (Dòng 4-5) trải đều toàn bộ 15 cột A -> O
-  // Hủy gộp tất cả các ô merge cũ tại Dòng 4-5 để tránh lỗi Exception: You must select all cells in a merged range
   try {
     sheet.getRange("A4:Z5").breakApart();
   } catch (errBreak) {}
@@ -206,33 +110,50 @@ function setupHeadersAndFormatting() {
   headerRange.setVerticalAlignment("middle");
   sheet.setRowHeight(7, 36);
 
-  // 4. Xóa sạch toàn bộ Data Validation cũ bị sót lại trên các cột khác (đặc biệt là Cột F Hạn hoàn thành)
+  // 4. Xóa sạch Data Validation thừa trên các cột không dùng Dropdown
   try {
-    sheet.getRange("A8:G100").clearDataValidations();
-    sheet.getRange("I8:O100").clearDataValidations();
+    sheet.getRange("A8:D100").clearDataValidations();
+    sheet.getRange("J8:O100").clearDataValidations();
   } catch (errClear) {}
 
-  // Định dạng chuẩn Date Picker sạch sẽ cho Cột F (Hạn hoàn thành - Cột 6)
+  // 5. Cấu hình Dropdowns và Date Picker chuẩn
+  // 5.1. Cột E: Lãnh đạo phòng
   try {
-    var deadlineRange = sheet.getRange("F8:F100");
-    var dateRule = SpreadsheetApp.newDataValidation()
-      .requireDate()
-      .setAllowInvalid(true)
-      .build();
-    deadlineRange.setDataValidation(dateRule);
+    var leaderList = ["Lê Hoàng", "Tô Thị Kim Thoa", "Nguyễn Thế Hòa"];
+    var leaderRule = SpreadsheetApp.newDataValidation().requireValueInList(leaderList, true).setAllowInvalid(true).build();
+    sheet.getRange("E8:E100").setDataValidation(leaderRule);
+  } catch (errLeader) {}
+
+  // 5.2. Cột F: Hạn hoàn thành - Date Picker chuẩn
+  try {
+    sheet.getRange("F8:F100").clearDataValidations();
+    var dateRule = SpreadsheetApp.newDataValidation().requireDate().setAllowInvalid(true).build();
+    sheet.getRange("F8:F100").setDataValidation(dateRule);
+    sheet.getRange("F8:F100").setNumberFormat("yyyy-mm-dd");
   } catch (errDate) {}
 
-  // 5. Cấu hình Dropdown Data Validation 4 trạng thái DUY NHẤT trên Cột H (H8:H100 - Cột 8)
+  // 5.3. Cột G: Mức độ ưu tiên
+  try {
+    var prioList = ["Bình thường", "Gấp", "Hỏa tốc"];
+    var prioRule = SpreadsheetApp.newDataValidation().requireValueInList(prioList, true).setAllowInvalid(true).build();
+    sheet.getRange("G8:G100").setDataValidation(prioRule);
+  } catch (errPrio) {}
+
+  // 5.4. Cột H: Trạng thái (Dropdown 4 màu)
   try {
     var statusList = ["Chưa bắt đầu", "Đang thực hiện", "Đang sửa lại", "Đã hoàn thành"];
-    var statusRule = SpreadsheetApp.newDataValidation()
-      .requireValueInList(statusList, true)
-      .setAllowInvalid(false)
-      .build();
+    var statusRule = SpreadsheetApp.newDataValidation().requireValueInList(statusList, true).setAllowInvalid(false).build();
     sheet.getRange("H8:H100").setDataValidation(statusRule);
   } catch (errVal) {}
 
-  // 6. Cấu hình Conditional Formatting (Bọc trong try-catch vì Google Tables chặn format trên typed columns)
+  // 5.5. Cột I: Sản phẩm
+  try {
+    var prodList = ["Công văn", "Tờ trình", "Báo cáo", "Kết luận", "Phiếu trình", "Kế hoạch", "Thông báo", "Quyết định"];
+    var prodRule = SpreadsheetApp.newDataValidation().requireValueInList(prodList, true).setAllowInvalid(true).build();
+    sheet.getRange("I8:I100").setDataValidation(prodRule);
+  } catch (errProd) {}
+
+  // 6. Cấu hình Conditional Formatting tự động đổi màu theo Trạng thái tại Cột H
   try {
     var statusRange = sheet.getRange("H8:H100");
     var ruleCompleted = SpreadsheetApp.newConditionalFormatRule()
@@ -266,33 +187,33 @@ function setupHeadersAndFormatting() {
     sheet.setConditionalFormatRules([ruleCompleted, ruleWorking, ruleRevising, ruleNotStarted]);
   } catch (errCond) {}
 
-  // 7. Căn lề, Word Wrap và Kẻ bảng chuẩn công vụ cho toàn bộ vùng dữ liệu A8:O100
+  // 7. Căn lề, Word Wrap và Kẻ bảng chuẩn công vụ cho toàn bộ vùng dữ liệu A8:O100 (BẢO TOÀN 100% NỘI DUNG)
   try {
-    var dataRange = sheet.getRange("A8:O100");
+    var lastRow = Math.max(sheet.getLastRow(), 14);
+    var numRows = lastRow - 7;
+    var dataRange = sheet.getRange(8, 1, numRows, 15);
     dataRange.setVerticalAlignment("middle");
     dataRange.setFontSize(10);
     dataRange.setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
     dataRange.setBorder(true, true, true, true, true, true, "#DADCE0", SpreadsheetApp.BorderStyle.SOLID);
     
     // Căn giữa các cột mã số, ngày, trạng thái
-    sheet.getRange("A8:A100").setHorizontalAlignment("center");
-    sheet.getRange("F8:H100").setHorizontalAlignment("center");
-    sheet.getRange("K8:L100").setHorizontalAlignment("center");
-    sheet.getRange("N8:N100").setHorizontalAlignment("center");
+    sheet.getRange("A8:A" + lastRow).setHorizontalAlignment("center");
+    sheet.getRange("E8:I" + lastRow).setHorizontalAlignment("center");
+    sheet.getRange("K8:L" + lastRow).setHorizontalAlignment("center");
+    sheet.getRange("N8:N" + lastRow).setHorizontalAlignment("center");
 
     // Căn trái các cột văn bản dài
-    sheet.getRange("B8:E100").setHorizontalAlignment("left");
-    sheet.getRange("I8:J100").setHorizontalAlignment("left");
-    sheet.getRange("M8:M100").setHorizontalAlignment("left");
-    sheet.getRange("O8:O100").setHorizontalAlignment("left");
-
-    // Thiết lập chiều cao dòng mặc định cho các dòng có dữ liệu
-    for (var r = 8; r <= 35; r++) {
-      sheet.setRowHeight(r, 45);
-    }
+    sheet.getRange("B8:D" + lastRow).setHorizontalAlignment("left");
+    sheet.getRange("J8:J" + lastRow).setHorizontalAlignment("left");
+    sheet.getRange("M8:M" + lastRow).setHorizontalAlignment("left");
+    sheet.getRange("O8:O" + lastRow).setHorizontalAlignment("left");
   } catch (errFormat) {}
   
   SpreadsheetApp.flush();
+  try {
+    SpreadsheetApp.getUi().alert("✨ ĐÃ FORMAT GIAO DIỆN & DROPDOWN THÀNH CÔNG!\n• Giữ nguyên 100% dữ liệu từng nhiệm vụ.\n• Đồng bộ Dashboard, Date Picker (Cột F) và Dropdown Trạng thái (Cột H).");
+  } catch (e) {}
   Logger.log("✅ Đã thiết lập hoàn tất: Bảng 15 cột, Dropdown 4 trạng thái, Conditional Formatting tự đổi màu, Text Wrapping và Kẻ bảng viền mỏng!");
 }
 
@@ -624,8 +545,8 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu("⚡ QUẢN LÝ NHIỆM VỤ")
     .addItem("🚀 KHÔI PHỤC & CĂN CHỈNH 15 CỘT (CLICK LÀ XONG)", "repairAndRestoreAllTasksClean")
-    .addItem("🔄 Format Lại Dashboard & Headers", "setupHeadersAndFormatting")
-    .addItem("🛠️ Căn Chỉnh Dữ Liệu Tự Động", "forceFixMisalignedColumns")
+    .addItem("✨ Format Giao Diện & Dropdown (Bảo toàn 100% dữ liệu)", "setupHeadersAndFormatting")
+    .addItem("🛠️ Căn Chỉnh Dữ Liệu Tự Động", "repairAndRestoreAllTasksClean")
     .addToUi();
 }
 
