@@ -235,17 +235,24 @@ class TaskManager:
         try:
             req_folder = urllib.request.Request(folder_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
             with urllib.request.urlopen(req_folder, timeout=20) as resp:
-                html = resp.read().decode('utf-8')
+                html = resp.read().decode('utf-8', errors='ignore')
                 
-                # Bóc tách tất cả các file PDF có trong thư mục: (Tên file, File ID)
-                # Google Drive render dạng aria-label="Tên_file.pdf PDF Shared" ... ssk='...:FILE_ID-0-16'
-                files = re.findall(r'aria-label="([^"]+?\.(?:pdf|PDF))\b[^"]*"[^>]*ssk=[\'"][^\'"]*?:([a-zA-Z0-9_\-]{28,35})', html)
+                # Giải mã escape JSON của Google Drive: \x22 -> ", \x5b -> [, \x5d -> ], \/ -> /
+                cleaned_html = html.replace('\\x22', '"').replace('\\x5b', '[').replace('\\x5d', ']').replace('\\/', '/')
                 
-                # Regex tìm tệp có số Task ID ở đầu:
-                # "4 - 24586 STC PPP.signed - Lộc.pdf", "4 - To trinh - Loc.pdf", "Task 4 - ...", "4_..."
-                task_regex = re.compile(rf'^(?:task\s*#?|nv\s*#?|t)?\s*{re.escape(target_id)}\s*([\-_–\s\.]|$)', re.IGNORECASE)
+                # Bóc tách cấu trúc: ["FILE_ID", ["FOLDER_ID"], "FILENAME.pdf"...]
+                pattern = r'\["([a-zA-Z0-9_\-]{25,45})",\s*\["[^"]*"\],\s*"([^"]+?\.(?:pdf|PDF|docx?|xlsx?))"'
+                drive_items = re.findall(pattern, cleaned_html)
                 
-                matched = next(((fid.split('-')[0], fn.strip()) for fn, fid in files if task_regex.search(fn.strip())), None)
+                # Regex nhận diện số Task ID ở đầu tên tệp
+                task_regex = re.compile(rf'^\s*(?:task\s*#?|nv\s*#?|t)?\s*{re.escape(target_id)}(?:[.\s\-_]|$)', re.IGNORECASE)
+                
+                matched = next(((fid, fn.strip()) for fid, fn in drive_items if task_regex.search(fn.strip())), None)
+                if not matched:
+                    # Fallback quét nếu có cấu trúc aria-label
+                    alt_files = re.findall(r'aria-label="([^"]+?\.(?:pdf|PDF))\b[^"]*"[^>]*ssk=[\'"][^\'"]*?:([a-zA-Z0-9_\-]{28,35})', html)
+                    matched = next(((fid.split('-')[0], fn.strip()) for fn, fid in alt_files if task_regex.search(fn.strip())), None)
+                
                 if matched:
                     clean_fid, f_name = matched
                     dl_url = f"https://drive.google.com/uc?export=download&id={clean_fid}"

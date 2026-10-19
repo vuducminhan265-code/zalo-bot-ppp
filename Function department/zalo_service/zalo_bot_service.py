@@ -104,10 +104,75 @@ def process_buffered_images(chat_id: str, sender_name: str, bot_key: str):
     filenames = batch.get("filenames", [])
     user_hint = batch.get("user_text", "")
     
-    # 1. Kiểm tra nếu chuyên viên đã bấm "Nộp task [số]" hoặc nhiều task trước khi gửi ảnh
-    pending_sub = PENDING_TASK_SUBMISSIONS.pop(chat_id, None)
-    if pending_sub and (time.time() - pending_sub.get("time", 0)) < 300: # Trong vòng 5 phút
-        t_ids = pending_sub.get("task_ids") or ([pending_sub["task_id"]] if "task_id" in pending_sub else [])
+    # 1. Kiểm tra chế độ nộp nhiều task tuần tự (Sequential Multi-Task Submission)
+    pending_sub = PENDING_TASK_SUBMISSIONS.get(chat_id)
+    if pending_sub and pending_sub.get("mode") == "sequential_multi_task":
+        tasks = pending_sub.get("tasks", [])
+        c_idx = pending_sub.get("current_index", 0)
+        if c_idx < len(tasks):
+            current_tid = tasks[c_idx]
+            # Lưu trữ danh sách ảnh cho task hiện tại
+            pending_sub["collected"][current_tid] = {
+                "files": list(files),
+                "filenames": list(filenames)
+            }
+            num_pics = len(files)
+            
+            if c_idx < len(tasks) - 1:
+                # Chưa hết danh sách -> Chuyển sang Task kế tiếp và yêu cầu gửi ảnh
+                next_idx = c_idx + 1
+                pending_sub["current_index"] = next_idx
+                next_tid = tasks[next_idx]
+                pending_sub["time"] = time.time()
+                
+                prompt_next = (
+                    f"✅ **Đã ghi nhận thành công {num_pics} hình ảnh sản phẩm cho Task #{current_tid}!**\n\n"
+                    f"👉 **Bước {next_idx + 1}/{len(tasks)}**: Tiếp tục xin mời Anh/Chị gửi hình ảnh sản phẩm của **Task #{next_tid}** để nghiệm thu.\n"
+                    f"*(Anh/Chị gửi ảnh Trang đầu Tiêu ngữ/Trích yếu + Trang cuối Nơi nhận/Chữ ký tương tự; hệ thống tự động lưu trữ và sẵn sàng tiếp nhận)*"
+                )
+                send_zalo_message(chat_id, prompt_next, bot_key=bot_key)
+                return
+            else:
+                # ĐÃ GOM ĐỦ ẢNH CỦA TẤT CẢ CÁC TASK!
+                PENDING_TASK_SUBMISSIONS.pop(chat_id, None)
+                summary_lines = []
+                for tid in tasks:
+                    t_count = len(pending_sub["collected"].get(tid, {}).get("files", []))
+                    summary_lines.append(f"• **Task #{tid}**: {t_count} ảnh")
+                
+                collected_summary_msg = (
+                    f"🎉 **ĐÃ THU THẬP ĐỦ TOÀN BỘ HÌNH ẢNH CHO CÁC NHIỆM VỤ!**\n\n"
+                    f"📊 **Tổng hợp số lượng ảnh đã tiếp nhận từ chuyên viên {sender_name}:**\n"
+                    + "\n".join(summary_lines) + "\n\n"
+                    f"⏳ **Hệ thống AI đang tiến hành thẩm định và đối soát tự động cho từng nhiệm vụ theo tuần tự...**"
+                )
+                send_zalo_message(chat_id, collected_summary_msg, bot_key=bot_key)
+                
+                for tid in tasks:
+                    t_data = pending_sub["collected"].get(tid, {})
+                    t_files = t_data.get("files", [])
+                    t_names = t_data.get("filenames", [])
+                    send_zalo_message(chat_id, f"🔍 Đang thẩm định sản phẩm ({len(t_files)} ảnh) cho **Task #{tid}**...", bot_key=bot_key)
+                    try:
+                        review_reply = bot_agent.process_message(
+                            user_text=f"Nộp task {tid}",
+                            sender_name=sender_name,
+                            file_attachment_path=t_files if len(t_files) > 1 else (t_files[0] if t_files else None)
+                        )
+                        send_zalo_message(chat_id, review_reply, bot_key=bot_key)
+                    except Exception as e:
+                        send_zalo_message(chat_id, f"⚠️ Lỗi thẩm định Task #{tid}: {e}", bot_key=bot_key)
+                    finally:
+                        for p in t_files:
+                            try:
+                                if os.path.exists(p): os.remove(p)
+                            except Exception: pass
+                return
+
+    # 2. Xử lý chế độ nộp đơn lẻ thông thường
+    single_sub = PENDING_TASK_SUBMISSIONS.pop(chat_id, None)
+    if single_sub and (time.time() - single_sub.get("time", 0)) < 300: # Trong vòng 5 phút
+        t_ids = single_sub.get("task_ids") or ([single_sub["task_id"]] if "task_id" in single_sub else [])
         if t_ids:
             tasks_str = " ".join(t_ids)
             if not any(f"task {tid}" in user_hint.lower() for tid in t_ids):
@@ -565,8 +630,12 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
 
             total_received = len(USER_IMAGE_BATCH[str_chat_id]["files"])
             pending_sub = PENDING_TASK_SUBMISSIONS.get(str_chat_id)
-            t_ids = pending_sub.get("task_ids") or ([pending_sub["task_id"]] if pending_sub and "task_id" in pending_sub else [])
-            task_label = f" cho Task #{', #'.join(t_ids)}" if t_ids else ""
+            if pending_sub and pending_sub.get("mode") == "sequential_multi_task":
+                curr_tid = pending_sub["tasks"][pending_sub["current_index"]]
+                task_label = f" cho Task #{curr_tid}"
+            else:
+                t_ids = pending_sub.get("task_ids") or ([pending_sub["task_id"]] if pending_sub and "task_id" in pending_sub else [])
+                task_label = f" cho Task #{', #'.join(t_ids)}" if t_ids else ""
 
             # PHÂN ĐỊNH 2 CÁCH NỘP HÌNH ẢNH:
             if is_new_batch and len(downloaded_files) == 1:
@@ -753,22 +822,50 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
                     send_zalo_message(chat_id, missing_msg, bot_key=bot_key)
                 return
 
+        # 5.1.5. Hủy tiến trình nộp bài đang chờ (nếu muốn dừng hoặc làm lại)
+        if clean_text in ["hủy", "huy", "dừng", "dung", "hủy nộp", "huy nop", "cancel", "reset", "thoát"]:
+            if str_chat_id in PENDING_TASK_SUBMISSIONS:
+                PENDING_TASK_SUBMISSIONS.pop(str_chat_id, None)
+                send_zalo_message(chat_id, "⏹️ Đã hủy tiến trình nộp bài đang chờ. Khi nào sẵn sàng, Anh/Chị có thể gõ lại `nộp task [số]` để nộp lại nhé!", bot_key=bot_key)
+                return
+
         # 5.2. Nhận diện hành động CHỈ ĐỊNH NỘP BÀI (Hỗ trợ nộp 1 hoặc nhiều task cùng lúc: nộp task 4, nộp task 4 5 6, nộp task 4-6...)
         sub_ids = extract_task_submission_intents(clean_text)
         if sub_ids:
-            PENDING_TASK_SUBMISSIONS[str_chat_id] = {"task_ids": sub_ids, "task_id": sub_ids[0], "time": time.time()}
-            RECENT_USER_TEXTS[str_chat_id] = {"text": raw_text, "time": time.time()}
-            ids_label = f"Task #{', #'.join(sub_ids)}"
-            
-            submission_prompt = (
-                f"📌 **Đã sẵn sàng tiếp nhận sản phẩm cho {ids_label} từ chuyên viên {sender_name}:**\n\n"
-                f"👉 **Anh/Chị có thể chọn 1 trong 2 cách nộp hình ảnh sau:**\n"
-                f"• **Cách 1A (Nộp từng ảnh lẻ)**: Gửi ảnh Trang 1 (Tiêu ngữ, Số, Trích yếu) ➔ Hệ thống sẽ xác nhận và đợi 6 giây để Anh/Chị gửi tiếp Trang cuối (Nơi nhận, Chữ ký).\n"
-                f"• **Cách 1B (Nộp gom một thể)**: Chọn và gửi cùng lúc tất cả các trang ảnh văn bản (Album / Multi-select) để AI tự động gom và đối soát toàn bộ.\n\n"
-                f"*(Hoặc nộp qua Google Drive: Tải tệp PDF lên Drive đặt tên `{sub_ids[0]} - [Tên file] - [Tên chuyên viên].pdf` rồi gõ `nộp task {' '.join(sub_ids)} pdf`)*"
-            )
-            send_zalo_message(chat_id, submission_prompt, bot_key=bot_key)
-            return
+            if len(sub_ids) > 1:
+                PENDING_TASK_SUBMISSIONS[str_chat_id] = {
+                    "mode": "sequential_multi_task",
+                    "tasks": sub_ids,
+                    "current_index": 0,
+                    "collected": {},
+                    "sender_name": sender_name,
+                    "time": time.time()
+                }
+                RECENT_USER_TEXTS[str_chat_id] = {"text": raw_text, "time": time.time()}
+                first_tid = sub_ids[0]
+                submission_prompt = (
+                    f"📌 **ĐÃ KÍCH HOẠT QUY TRÌNH NỘP TUẦN TỰ CHO CÁC NHIỆM VỤ: Task #{', #'.join(sub_ids)}** (Chuyên viên {sender_name}):\n\n"
+                    f"👉 **Bước 1/{len(sub_ids)}**: Xin mời Anh/Chị gửi ảnh sản phẩm cho **Task #{first_tid}** trước.\n"
+                    f"• Có thể gửi từng ảnh lẻ (Trang đầu ➔ Trang cuối) hoặc gửi gom cả album ảnh của Task #{first_tid}.\n"
+                    f"• Khi nhận đủ ảnh của Task #{first_tid}, hệ thống sẽ xác nhận và tự động nhắc Anh/Chị gửi tiếp Task #{sub_ids[1]}.\n\n"
+                    f"💡 *Mẹo nộp siêu tốc qua Google Drive*: Nếu đã tải toàn bộ các tệp PDF lên Drive (định dạng `[ID] - [Tên file] - [Tên chuyên viên].pdf`), Anh/Chị chỉ cần gõ: `nộp task {' '.join(sub_ids)} pdf` để AI tự động thẩm định và nghiệm thu đồng loạt toàn bộ!"
+                )
+                send_zalo_message(chat_id, submission_prompt, bot_key=bot_key)
+                return
+            else:
+                pid = sub_ids[0]
+                PENDING_TASK_SUBMISSIONS[str_chat_id] = {"mode": "single_task", "task_ids": sub_ids, "task_id": pid, "time": time.time()}
+                RECENT_USER_TEXTS[str_chat_id] = {"text": raw_text, "time": time.time()}
+                
+                submission_prompt = (
+                    f"📌 **Đã sẵn sàng tiếp nhận sản phẩm cho Task #{pid} từ chuyên viên {sender_name}:**\n\n"
+                    f"👉 **Anh/Chị có thể chọn 1 trong 2 cách nộp hình ảnh sau:**\n"
+                    f"• **Cách 1A (Nộp từng ảnh lẻ)**: Gửi ảnh Trang 1 (Tiêu ngữ, Số, Trích yếu) ➔ Hệ thống sẽ xác nhận và đợi 6 giây để Anh/Chị gửi tiếp Trang cuối (Nơi nhận, Chữ ký).\n"
+                    f"• **Cách 1B (Nộp gom một thể)**: Chọn và gửi cùng lúc tất cả các trang ảnh văn bản (Album / Multi-select) để AI tự động gom và đối soát toàn bộ.\n\n"
+                    f"*(Hoặc nộp qua Google Drive: Tải tệp PDF lên Drive đặt tên `{pid} - [Tên file] - [Tên chuyên viên].pdf` rồi gõ `nộp task {pid} pdf`)*"
+                )
+                send_zalo_message(chat_id, submission_prompt, bot_key=bot_key)
+                return
 
         # 5.3. Tra cứu chi tiết một Task (task 4, xem task 4, t4, nv 4...)
         view_task_id = extract_task_view_intent(clean_text)

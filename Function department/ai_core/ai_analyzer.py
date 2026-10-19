@@ -60,33 +60,66 @@ class TaskAIAnalyzer:
         return ""
 
     def _extract_text_fallback(self, file_path: str) -> str:
-        """Trích xuất thông minh trang đầu, trang nơi nhận, và trang cuối từ PDF/Word"""
+        """Trích xuất thông minh văn bản từ PDF/Word, tự động OCR bằng Gemini nếu là PDF scan nhiều trang"""
         ext = os.path.splitext(file_path)[1].lower()
         if ext == ".pdf":
+            extracted_pages = []
             try:
                 reader = pypdf.PdfReader(file_path)
                 num_pages = len(reader.pages)
-                extracted_pages = []
                 
-                # 1. Luôn đọc tối đa 3 trang đầu (Tiêu ngữ, Số ký hiệu, Ngày, Trích yếu)
-                for p_idx in range(min(3, num_pages)):
+                # 1. Quét thông minh tối đa 4 trang đầu (Tiêu ngữ, Số ký hiệu, Ngày, Trích yếu)
+                for p_idx in range(min(4, num_pages)):
                     txt = reader.pages[p_idx].extract_text() or ""
-                    extracted_pages.append(f"--- TRANG {p_idx + 1} (ĐẦU VĂN BẢN) ---\n" + txt)
+                    if txt.strip():
+                        extracted_pages.append(f"--- TRANG {p_idx + 1} (ĐẦU VĂN BẢN) ---\n" + txt)
                     
-                # 2. Tìm kiếm các trang có "Nơi nhận:" hoặc "Lưu:"
-                for p_idx in range(3, num_pages):
+                # 2. Quét các trang trung gian tìm "Nơi nhận:", "Lưu:", "Phiếu trình", "Tờ trình", "Ký"
+                for p_idx in range(4, num_pages):
                     txt = reader.pages[p_idx].extract_text() or ""
-                    if any(k in txt for k in ["Nơi nhận", "Lưu:", "VT,", "PPP&QLN"]):
+                    if any(k in txt for k in ["Nơi nhận", "Lưu:", "VT,", "PPP&QLN", "Người trình", "Lãnh đạo", "Chuyên viên"]):
                         extracted_pages.append(f"--- TRANG {p_idx + 1} (NƠI NHẬN & CHỮ KÝ) ---\n" + txt)
                         
                 # 3. Luôn đọc trang cuối nếu chưa nằm trong danh sách
-                if num_pages > 3 and not any(f"--- TRANG {num_pages}" in ep for ep in extracted_pages):
+                if num_pages > 4 and not any(f"--- TRANG {num_pages}" in ep for ep in extracted_pages):
                     txt_last = reader.pages[-1].extract_text() or ""
-                    extracted_pages.append(f"--- TRANG {num_pages} (TRANG CUỐI) ---\n" + txt_last)
+                    if txt_last.strip():
+                        extracted_pages.append(f"--- TRANG {num_pages} (TRANG CUỐI) ---\n" + txt_last)
                     
-                return "\n\n".join(extracted_pages)
+                combined_text = "\n\n".join(extracted_pages).strip()
+                if len(combined_text) >= 50:
+                    return combined_text
             except Exception as e:
-                sys.stderr.write(f"PDF extract error: {e}\n")
+                sys.stderr.write(f"PDF pypdf extract error: {e}\n")
+
+            # 4. NẾU LÀ TỆP PDF SCAN / ẢNH (Không có font chữ nhúng, text < 50 ký tự):
+            # Dùng Gemini đọc trực tiếp tệp PDF (hỗ trợ đọc đồng thời nhiều trang scan)
+            if self.client and os.path.exists(file_path):
+                try:
+                    with open(file_path, "rb") as f_pdf:
+                        pdf_b = f_pdf.read()
+                    pdf_part = types.Part.from_bytes(data=pdf_b, mime_type="application/pdf")
+                    ocr_prompt = (
+                        "Hãy đọc toàn bộ tài liệu PDF công vụ này và trích xuất chi tiết:\n"
+                        "1. Tiêu ngữ, Tên cơ quan ban hành, Số ký hiệu văn bản, Ngày tháng năm ban hành.\n"
+                        "2. Loại văn bản (Tờ trình, Phiếu trình, Báo cáo, Công văn, Kết luận...).\n"
+                        "3. Trích yếu hoặc Nội dung chính của văn bản.\n"
+                        "4. Phần Nơi nhận (đặc biệt dòng Lưu: VT, PPP&QLN (...)) và phần Chữ ký/Họ tên lãnh đạo hoặc chuyên viên trình.\n"
+                        "Giữ nguyên văn chính xác các số ký hiệu, ngày tháng và chữ viết tắt."
+                    )
+                    for m_name in ["gemini-3.5-flash-lite", "gemini-3.5-flash"]:
+                        try:
+                            resp = self.client.models.generate_content(
+                                model=m_name,
+                                contents=[pdf_part, ocr_prompt]
+                            )
+                            if resp.text and len(resp.text.strip()) > 30:
+                                return resp.text.strip()
+                        except Exception:
+                            time.sleep(0.5)
+                except Exception as e_gem:
+                    sys.stderr.write(f"Gemini PDF OCR fallback error: {e_gem}\n")
+            return ""
         elif ext in [".docx", ".doc"]:
             try:
                 import docx
@@ -187,32 +220,45 @@ class TaskAIAnalyzer:
         return meta
 
     def check_initials_match_assignee(self, initials: str, assignee_name: str) -> bool:
-        """Đối chiếu chữ viết tắt tại Nơi nhận với tên chuyên viên được giao nhiệm vụ trên Spreadsheet"""
+        """Đối chiếu chữ viết tắt tại Nơi nhận hoặc tên chuyên viên phụ trách"""
         if not initials or not assignee_name:
             return False
         init_clean = initials.lower().strip()
         ass_clean = assignee_name.lower().strip()
+        init_no_accent = remove_vn_accents(init_clean)
         ass_no_accent = remove_vn_accents(ass_clean)
         
-        # 1. So khớp theo bản đồ chữ viết tắt chính thức
+        # Bỏ ký tự đặc biệt
+        init_alpha = re.sub(r'[^a-zA-Z0-9]', '', init_no_accent)
+        ass_alpha = re.sub(r'[^a-zA-Z0-9]', '', ass_no_accent)
+
+        # 1. Trùng trực tiếp
+        if init_alpha == ass_alpha or init_clean == ass_clean:
+            return True
+
+        # 2. So khớp theo bản đồ chữ viết tắt chính thức
         for full_name, valid_list in STAFF_INITIALS_MAP.items():
-            if full_name in ass_clean or ass_clean in full_name or remove_vn_accents(full_name) in ass_no_accent:
-                if init_clean in valid_list:
+            fn_no_acc = remove_vn_accents(full_name)
+            if full_name in ass_clean or ass_clean in full_name or fn_no_acc in ass_no_accent:
+                norm_valid = [re.sub(r'[^a-zA-Z0-9]', '', remove_vn_accents(v.lower())) for v in valid_list]
+                if init_clean in valid_list or init_alpha in norm_valid:
                     return True
                 # Khử nhiễu OCR: 't' bị đọc nhầm thành 'l' hoặc '1'
-                ocr_variants = [init_clean.replace('l', 't'), init_clean.replace('1', 't'), init_clean.replace('t', 'l')]
-                if any(v in valid_list for v in ocr_variants):
+                ocr_variants = [init_alpha.replace('l', 't'), init_alpha.replace('1', 't'), init_alpha.replace('t', 'l')]
+                if any(v in norm_valid for v in ocr_variants):
                     return True
                 
-        # 2. So khớp tự động theo tên riêng không dấu (ví dụ: loc, hoa, giang...)
-        tokens_no_acc = [re.sub(r'[^\w]', '', w) for w in ass_no_accent.split()]
+        # 3. So khớp tự động theo tên riêng không dấu (ví dụ: loc, hoa, giang...)
+        tokens_no_acc = [re.sub(r'[^\w]', '', w) for w in ass_no_accent.split() if w]
         if tokens_no_acc:
             last_name = tokens_no_acc[-1] # ví dụ "loc"
-            if last_name and (last_name in init_clean or init_clean.endswith(last_name)):
+            if last_name and (last_name == init_alpha or init_alpha.endswith(last_name) or last_name in init_alpha):
                 return True
             first_letters = "".join([w[0] for w in tokens_no_acc[:-1]])
             combined = f"{first_letters}{last_name}"
-            if init_clean == combined or init_clean == last_name:
+            if init_alpha == combined or init_alpha == last_name:
+                return True
+            if init_alpha in ass_alpha or ass_alpha in init_alpha:
                 return True
                 
         return False
@@ -485,10 +531,10 @@ CẤU TRÚC TÀI LIỆU NHẬN DIỆN:
 
 YÊU CẦU THẨM ĐỊNH THỂ THỨC (THEO NGHỊ ĐỊNH 30/2020/NĐ-CP):
 1. THỂ THỨC VĂN BẢN:
-   - "document_number": Tìm chính xác Số ký hiệu văn bản (Ví dụ: "24586/STC-PPP&QLN", "7937 /UBND-PKT"). Nếu văn bản chưa có số (còn để trống) thì để chuỗi rỗng "".
+   - "document_number": Tìm chính xác Số ký hiệu văn bản (Ví dụ: "24586/STC-PPP&QLN", "7937 /UBND-PKT"). Nếu văn bản chưa có số (còn để trống) thì để chuỗi rỗng "". (Đặc biệt với Phiếu trình / Tờ trình nội bộ: nếu là văn bản trình nội bộ lấy ý kiến thì có thể không có số công văn phát hành ngoài nhưng có số phiếu hoặc ngày trình).
    - "document_date": Ngày tháng năm ban hành (Định dạng "DD/MM/YYYY", ví dụ: "25/08/2026"). Nếu văn bản chưa có ngày thì để rỗng "".
-   - "deliverable": Xác định chuẩn loại sản phẩm: "Tờ trình", "Kết luận", "Báo cáo", "Quyết định", "Kế hoạch", "Thông báo", "Công văn".
-   - "actual_summary": Trích yếu thực tế trong văn bản (bắt đầu bằng V/v hoặc Về việc...).
+   - "deliverable": Xác định chuẩn loại sản phẩm: "Phiếu trình", "Tờ trình", "Kết luận", "Báo cáo", "Quyết định", "Kế hoạch", "Thông báo", "Công văn".
+   - "actual_summary": Trích yếu thực tế trong văn bản (bắt đầu bằng V/v hoặc Về việc...; riêng Phiếu trình/Tờ trình thì nội dung chính dưới tiêu đề chính là trích yếu).
 
 2. ĐỐI SOÁT TRÍCH YẾU & TỪ KHÓA (KEYWORDS):
    - So sánh trích yếu bóc tách với Tên nhiệm vụ / Trích yếu của Task ID thẩm định.
@@ -496,15 +542,15 @@ YÊU CẦU THẨM ĐỊNH THỂ THỨC (THEO NGHỊ ĐỊNH 30/2020/NĐ-CP):
    - "matched_keywords": Danh sách các từ khóa dự án khớp được.
 
 3. ĐỐI SOÁT NƠI NHẬN & CHỮ VIẾT TẮT CHUYÊN VIÊN (LINH HOẠT TUYỆT ĐỐI):
-   - Tìm dòng cuối văn bản tại mục "Nơi nhận": "- Lưu: VT, PPP&QLN (..., ...b)."
-   - "recipient_initials": Trích chữ viết tắt trong ngoặc đơn (Ví dụ: "NtbLoc", "ntbloc", "Nthoa", "pchan", "Hthgiang", "Vdman"...).
+   - Tìm dòng cuối văn bản tại mục "Nơi nhận": "- Lưu: VT, PPP&QLN (..., ...b)." HOẶC phần chữ ký/người đề xuất/chuyên viên thụ lý (trong Phiếu trình, Tờ trình).
+   - "recipient_initials": Trích chữ viết tắt trong ngoặc đơn (Ví dụ: "NtbLoc", "ntbloc", "Lộc", "Nthoa", "pchan", "Hthgiang", "Vdman"...) hoặc họ tên chuyên viên tại phần trình duyệt.
    - "initials_match": 
-     + TUYỆT ĐỐI KHÔNG BẮT LỖI CHỮ HOA/THƯỜNG: Chấp nhận mọi biến thể hoa/thường (Ví dụ: NtbLoc, ntbloc, NTBLOC, tbloc, ...Loc đều là của Nguyễn Trung Bảo Lộc). Nếu chữ viết tắt có chứa tên của chuyên viên phụ trách của Task đó -> true.
+     + TUYỆT ĐỐI KHÔNG BẮT LỖI CHỮ HOA/THƯỜNG / CÓ DẤU HOẶC KHÔNG DẤU: Chấp nhận mọi biến thể (Ví dụ: Lộc, Loc, NtbLoc, ntbloc, NTBLOC, tbloc đều là của Nguyễn Trung Bảo Lộc; Hòa, Hoa, Nthoa đều là của Nguyễn Thế Hòa...). Nếu chữ viết tắt hoặc tên khớp với chuyên viên phụ trách của Task đó -> true.
      + NẾU KHÔNG CÓ DÒNG NƠI NHẬN (do người nộp chỉ chụp trang đầu có Tiêu ngữ/Số/Ngày/Trích yếu): VẪN ĐỂ "initials_match": true và KHÔNG ĐƯỢC coi là lỗi, vì văn bản đã có Số và Ngày ban hành chính thức!
      + Chỉ để false nếu chữ viết tắt rõ ràng của một chuyên viên KHÁC trong phòng.
 
 4. KẾT LUẬN NGHIỆM THU:
-   - "status_decision": "completed" nếu: (1) Trích yếu/từ khóa khớp đúng Task; (2) Có Số ký hiệu chính thức; (3) Có Ngày ban hành chính thức; (4) Chữ viết tắt nơi nhận không bị xung đột với người khác.
+   - "status_decision": "completed" nếu: (1) Trích yếu/từ khóa khớp đúng Task; (2) Có Số ký hiệu chính thức (hoặc là Phiếu trình/Tờ trình nội bộ có nội dung và chuyên viên đề xuất hợp lệ); (3) Có Ngày ban hành hoặc ngày trình; (4) Chữ viết tắt nơi nhận/chữ ký không bị xung đột với người khác.
    - Trả về "needs_revision" nếu vi phạm: Sai nội dung dự án, hoặc văn bản chưa có Số ký hiệu chính thức, hoặc chưa có Ngày ban hành.
    - "validation_errors": Danh sách lỗi (để mảng rỗng [] nếu văn bản đạt chuẩn hoặc là bản chính thức đã có Số và Ngày).
 
@@ -540,6 +586,14 @@ TRẢ VỀ ĐỊNH DẠNG JSON DUY NHẤT:
                             mime = "image/jpeg" if ext in [".jpg", ".jpeg"] else "image/png"
                             contents.append(types.Part.from_text(text=f"[ẢNH ĐÍNH KÈM: {role}]"))
                             contents.append(types.Part.from_bytes(data=img_b, mime_type=mime))
+                        except Exception:
+                            pass
+                    elif ext == ".pdf":
+                        try:
+                            with open(p, "rb") as f_pdf:
+                                pdf_b = f_pdf.read()
+                            contents.append(types.Part.from_text(text=f"[TÀI LIỆU PDF ĐÍNH KÈM: {role}]"))
+                            contents.append(types.Part.from_bytes(data=pdf_b, mime_type="application/pdf"))
                         except Exception:
                             pass
                 contents.append(prompt)
