@@ -802,6 +802,8 @@ function repairAndRestoreAllTasksClean() {
     } else if (st === "Đang sửa lại") {
       cell.setBackground("#FCE8E6").setFontColor("#C5221F").setFontWeight("bold");
     }
+  }
+
   // Cài đặt Data Validation chuẩn:
   // Cột F (Hạn hoàn thành): Date Picker chuẩn ngày
   try {
