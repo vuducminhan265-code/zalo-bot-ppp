@@ -20,9 +20,87 @@
  * O (15): Tên file đã nộp
  */
 
+function alignExistingDataTo15Columns(sheet) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 8) return;
+  
+  var numRows = Math.min(lastRow - 7, 95);
+  var dataRange = sheet.getRange(8, 1, numRows, 15);
+  var values = dataRange.getValues();
+  var modified = false;
+  
+  for (var i = 0; i < values.length; i++) {
+    var row = values[i];
+    var taskId = String(row[0] || "").trim();
+    if (!taskId) continue;
+    
+    // Dấu hiệu hàng đang bị lệch theo kiểu cũ 13 cột:
+    // Cột D (row[3]) chứa ngày hạn hoàn thành (Date hoặc chuỗi '2026-' / '/')
+    var colD_val = row[3];
+    var isOldLayout = false;
+    if (colD_val instanceof Date) {
+      isOldLayout = true;
+    } else if (typeof colD_val === "string" && (colD_val.indexOf("202") !== -1 || colD_val.indexOf("/") !== -1)) {
+      isOldLayout = true;
+    }
+    
+    if (isOldLayout) {
+      modified = true;
+      var taskName = row[1];
+      var assignee = row[2];
+      var deadline = row[3];
+      var priority = row[4];
+      var status = row[5];
+      var deliverable = row[6];
+      var trichYeu = row[7];
+      var soKyHieu = row[8];
+      var ngayBanHanh = row[9];
+      var aiSummary = row[10];
+      var submittedAt = row[11];
+      var fileName = row[12];
+      
+      // Tự động bóc tách tên Dự án từ Task Name hoặc Trích yếu
+      var project = "";
+      var textToScan = (trichYeu || taskName || "") + "";
+      var m = textToScan.match(/(Dự\s*án(?:\s+thành\s+phần\s+\d+)?\s*[:\-\–]?\s*[^,;\.\n\r]+)/i);
+      if (m) {
+        project = m[1].trim();
+      }
+      
+      // Căn chỉnh vào đúng 15 cột mới:
+      // A (0): Task ID | B (1): Tên nhiệm vụ | C (2): Dự án | D (3): Người phụ trách | E (4): Lãnh đạo phòng
+      // F (5): Hạn hoàn thành | G (6): Mức độ ưu tiên | H (7): Trạng thái | I (8): Sản phẩm | J (9): Trích yếu
+      // K (10): Số ký hiệu | L (11): Ngày ban hành | M (12): Đánh giá AI | N (13): Thời gian nộp | O (14): Tên file
+      values[i][0] = taskId;
+      values[i][1] = taskName;
+      values[i][2] = project;
+      values[i][3] = assignee;
+      values[i][4] = "";
+      values[i][5] = deadline;
+      values[i][6] = priority;
+      values[i][7] = status;
+      values[i][8] = deliverable;
+      values[i][9] = trichYeu;
+      values[i][10] = soKyHieu;
+      values[i][11] = ngayBanHanh;
+      values[i][12] = aiSummary;
+      values[i][13] = submittedAt;
+      values[i][14] = fileName;
+    }
+  }
+  
+  if (modified) {
+    dataRange.setValues(values);
+    Logger.log("✅ Đã tự động dịch chuyển và căn chỉnh các hàng dữ liệu cũ sang đúng 15 cột mới!");
+  }
+}
+
 function setupHeadersAndFormatting() {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   sheet.setFrozenRows(7); // Khóa cố định từ dòng 7 trở lên (Dashboard & Headers)
+  
+  // Tự động căn chỉnh dữ liệu cũ nếu phát hiện đang bị lệch cột
+  alignExistingDataTo15Columns(sheet);
   
   // 1. Cấu hình độ rộng 15 cột chuẩn thẩm mỹ công sở
   var columnWidths = {
