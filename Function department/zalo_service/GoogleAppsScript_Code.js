@@ -579,28 +579,36 @@ function createDailyTriggers() {
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu("⚡ QUẢN LÝ NHIỆM VỤ")
-    .addItem("🚀 KHÔI PHỤC & CĂN CHỈNH 15 CỘT (CLICK LÀ XONG)", "repairAndRestoreAllTasksClean")
-    .addItem("✨ Format Giao Diện & Dropdown (Bảo toàn 100% dữ liệu)", "setupHeadersAndFormatting")
-    .addItem("🛠️ Căn Chỉnh Dữ Liệu Tự Động", "repairAndRestoreAllTasksClean")
+    .addItem("🎯 ĐỒNG BỘ & KHÔI PHỤC BẢNG 15 CỘT (CHỨC NĂNG CHÍNH)", "repairAndRestoreAllTasksClean")
     .addToUi();
 }
 
 /**
- * HÀM CƯỠNG CHẾ CĂN CHỈNH DỮ LIỆU LỆCH 15 CỘT
- */
-function forceFixMisalignedColumns() {
-  repairAndRestoreAllTasksClean();
-}
-
-/**
  * HÀM KHÔI PHỤC VÀ ĐỒNG BỘ 100% DỮ LIỆU CHUẨN 15 CỘT TRỰC TIẾP TRÊN SHEET HIỆN HÀNH (IN-PLACE)
- * Bảo toàn tuyệt đối Sheet GID (735957328), không tạo thêm tab thừa.
- * Cột F (Hạn hoàn thành): Date Picker yyyy-mm-dd
- * Cột H (Trạng thái): Dropdown 4 trạng thái chuẩn
+ * - Duy trì 1 sheet duy nhất: Task_Tracker (Tự động xóa tab thừa Task_Tracker_Backup).
+ * - Bảo toàn tuyệt đối Sheet GID (735957328).
+ * - Cột F (Hạn hoàn thành): Date Picker yyyy-mm-dd
+ * - Cột H (Trạng thái): Dropdown 4 trạng thái chuẩn
  */
 function repairAndRestoreAllTasksClean() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName("Task_Tracker") || ss.getActiveSheet();
+
+  // 0. Tự động dọn dẹp và xóa sheet sao lưu thừa (Task_Tracker_Backup) nếu có
+  var backupSheet = ss.getSheetByName("Task_Tracker_Backup");
+  if (backupSheet && ss.getSheets().length > 1) {
+    try {
+      ss.deleteSheet(backupSheet);
+      Logger.log("Đã tự động xóa tab thừa Task_Tracker_Backup.");
+    } catch (eDel) {}
+  }
+  
+  // Đảm bảo tên sheet luôn chuẩn là Task_Tracker
+  try {
+    if (sheet.getName() !== "Task_Tracker") {
+      sheet.setName("Task_Tracker");
+    }
+  } catch (eName) {}
   
   // 1. Tiêu đề hệ thống (Dòng 1-2)
   sheet.getRange("A1").setValue("HỆ THỐNG QUẢN LÝ TIẾN ĐỘ NHIỆM VỤ & NHẬN DIỆN NỘP FILE (ZALO BOT)")
