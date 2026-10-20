@@ -279,7 +279,7 @@ function doPost(e) {
   var lock = LockService.getScriptLock();
   try {
     lock.waitLock(10000);
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Task_Tracker") || SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
     var postData = JSON.parse(e.postData.contents);
     
     // 1. Hỗ trợ trigger format và khôi phục căn chỉnh bảng tự động từ xa
@@ -305,7 +305,6 @@ function doPost(e) {
         var nameLower = name.toLowerCase();
         
         // Nhận diện chuẩn format: "[Số Task] - [Tên file] - [Tên chuyên viên].pdf"
-        // Ví dụ: "4 - Tờ trình - Nguyễn Trung Bảo Lộc.pdf", "4 - file - tên chuyên viên.pdf", "Task 4 - To trinh.pdf"
         var isMatch = false;
         var regex = new RegExp("^(?:task\\s*#?|nv\\s*#?|t)?\\s*" + taskId + "\\s*([\\-_–\\s]|$)", "i");
         if (regex.test(name) || nameLower.indexOf(taskId + " - ") === 0 || nameLower.indexOf(taskId + "-") === 0 || nameLower.indexOf(taskId + "_") === 0 || nameLower.indexOf("task " + taskId) !== -1 || nameLower.indexOf("task_" + taskId) !== -1 || nameLower.indexOf(taskId + " ") === 0) {
@@ -333,7 +332,7 @@ function doPost(e) {
       })).setMimeType(ContentService.MimeType.JSON);
     }
     
-    // 3. Cập nhật kết quả thẩm định nhiệm vụ (15 Cột)
+    // 3. Cập nhật kết quả thẩm định nhiệm vụ (CHUẨN 15 CỘT DỰA TRÊN DÒNG TIÊU ĐỀ DÒNG 7)
     var taskId = String(postData.taskId).trim();
     var status = postData.status || "Đã hoàn thành";
     var summary = postData.summary || "";
@@ -363,9 +362,36 @@ function doPost(e) {
         message: "Không tìm thấy Task ID: " + taskId
       })).setMimeType(ContentService.MimeType.JSON);
     }
+
+    // Bóc tách động các cột dựa trên Dòng 7 để đảm bảo KHÔNG BAO GIỜ ghi đè nhầm cột
+    var headerRow = sheet.getRange(7, 1, 1, Math.max(sheet.getLastColumn(), 15)).getValues()[0];
+    function getColIdx(keywords, defaultCol) {
+      for (var c = 0; c < headerRow.length; c++) {
+        var h = String(headerRow[c] || "").trim().toLowerCase();
+        for (var k = 0; k < keywords.length; k++) {
+          if (h.indexOf(keywords[k]) !== -1) return c + 1; // 1-based index
+        }
+      }
+      return defaultCol;
+    }
+
+    var colProject = getColIdx(["dự án"], 3);
+    var colStatus = getColIdx(["trạng thái"], 8);
+    var colDeliverable = getColIdx(["sản phẩm"], 9);
+    var colSummary = getColIdx(["trích yếu"], 10);
+    var colDocNumber = getColIdx(["số ký hiệu", "số văn bản"], 11);
+    var colDocDate = getColIdx(["ngày ban hành"], 12);
+    var colAiReview = getColIdx(["đánh giá ai"], 13);
+    var colSubmittedAt = getColIdx(["thời gian nộp"], 14);
+    var colFileName = getColIdx(["tên file"], 15);
+
+    // BẢO VỆ TUYỆT ĐỐI CỘT 6 (HẠN HOÀN THÀNH) VÀ CỘT 7 (MỨC ĐỘ ƯU TIÊN):
+    // Tuyệt đối không bao giờ cho phép ghi đè Trạng thái hay Sản phẩm vào Cột 6 hoặc Cột 7!
+    if (colStatus <= 7) colStatus = 8;
+    if (colDeliverable <= 7) colDeliverable = 9;
     
-    // Cập nhật Cột 8 (Cột H): Trạng thái
-    var statusCell = sheet.getRange(targetRow, 8);
+    // Cập nhật Cột Trạng thái (Cột H / Cột 8)
+    var statusCell = sheet.getRange(targetRow, colStatus);
     statusCell.setValue(status);
     
     // Đổi màu nền trạng thái trực quan
@@ -382,29 +408,29 @@ function doPost(e) {
       statusCell.setFontColor("#B06000");
     }
     
-    // Cập nhật Cột 3 (Cột C): Dự án (nếu rỗng hoặc có bóc tách mới)
+    // Cập nhật Cột Dự án (Cột C / Cột 3)
     if (project) {
-      var currentProj = String(sheet.getRange(targetRow, 3).getValue() || "").trim();
+      var currentProj = String(sheet.getRange(targetRow, colProject).getValue() || "").trim();
       if (!currentProj) {
-        sheet.getRange(targetRow, 3).setValue(project);
+        sheet.getRange(targetRow, colProject).setValue(project);
       }
     }
     
-    // Cập nhật Cột 9 (Cột I): Sản phẩm (Tờ trình, Kết luận, Báo cáo, Công văn...)
+    // Cập nhật Cột Sản phẩm (Cột I / Cột 9)
     if (deliverable) {
-      var currentDeliv = String(sheet.getRange(targetRow, 9).getValue() || "").trim();
+      var currentDeliv = String(sheet.getRange(targetRow, colDeliverable).getValue() || "").trim();
       if (!currentDeliv || status === "Đã hoàn thành") {
-        sheet.getRange(targetRow, 9).setValue(deliverable);
+        sheet.getRange(targetRow, colDeliverable).setValue(deliverable);
       }
     }
     
-    // Cập nhật trích yếu thực tế nếu có
-    if (actualSummary) sheet.getRange(targetRow, 10).setValue(actualSummary);
-    if (docNumber) sheet.getRange(targetRow, 11).setValue(docNumber);
-    if (docDate) sheet.getRange(targetRow, 12).setValue(docDate);
-    sheet.getRange(targetRow, 13).setValue(summary);
-    sheet.getRange(targetRow, 14).setValue(formattedTime);
-    sheet.getRange(targetRow, 15).setValue(fileName);
+    // Cập nhật các cột thông tin thẩm định chi tiết
+    if (actualSummary) sheet.getRange(targetRow, colSummary).setValue(actualSummary);
+    if (docNumber) sheet.getRange(targetRow, colDocNumber).setValue(docNumber);
+    if (docDate) sheet.getRange(targetRow, colDocDate).setValue(docDate);
+    sheet.getRange(targetRow, colAiReview).setValue(summary);
+    sheet.getRange(targetRow, colSubmittedAt).setValue(formattedTime);
+    sheet.getRange(targetRow, colFileName).setValue(fileName);
     
     // Tự động kẻ bảng, wrap text và căn lề toàn bộ hàng vừa cập nhật (cột 1 đến 15)
     var updatedRowRange = sheet.getRange(targetRow, 1, 1, 15);
@@ -416,7 +442,7 @@ function doPost(e) {
     SpreadsheetApp.flush();
     return ContentService.createTextOutput(JSON.stringify({
       success: true,
-      message: "Cập nhật thành công cho Task ID: " + taskId
+      message: "Cập nhật thành công cho Task ID: " + taskId + " vào đúng Cột 8 (Trạng thái) & Cột 9 (Sản phẩm)!"
     })).setMimeType(ContentService.MimeType.JSON);
     
   } catch (err) {
@@ -430,54 +456,63 @@ function doPost(e) {
 }
 
 function doGet(e) {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Task_Tracker") || SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   var data = sheet.getDataRange().getValues();
   var tasks = [];
   
-  // Kiểm tra số lượng cột thực tế (hỗ trợ cả bảng 13 cột và 15 cột)
-  var is15Col = data.length > 6 && data[6].length >= 15;
+  if (data.length < 8) {
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      data: tasks
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+  
+  var headerRow = data[6].map(function(h) { return String(h || "").trim().toLowerCase(); });
+  function findColIdx(keywords, defaultCol) {
+    for (var c = 0; c < headerRow.length; c++) {
+      for (var k = 0; k < keywords.length; k++) {
+        if (headerRow[c].indexOf(keywords[k]) !== -1) return c;
+      }
+    }
+    return defaultCol;
+  }
+  
+  var colTaskId = findColIdx(["task id", "mã task", "id"], 0);
+  var colTaskName = findColIdx(["tên nhiệm vụ", "công việc"], 1);
+  var colProject = findColIdx(["dự án"], 2);
+  var colAssignee = findColIdx(["người phụ trách", "chuyên viên"], 3);
+  var colLeader = findColIdx(["lãnh đạo"], 4);
+  var colDeadline = findColIdx(["hạn hoàn thành", "deadline"], 5);
+  var colPriority = findColIdx(["mức độ ưu tiên", "ưu tiên"], 6);
+  var colStatus = findColIdx(["trạng thái"], 7);
+  var colDeliverable = findColIdx(["sản phẩm"], 8);
+  var colSummary = findColIdx(["trích yếu"], 9);
+  var colDocNum = findColIdx(["số ký hiệu", "số văn bản"], 10);
+  var colDocDate = findColIdx(["ngày ban hành"], 11);
+  var colAi = findColIdx(["đánh giá ai"], 12);
+  var colSubmitted = findColIdx(["thời gian nộp"], 13);
+  var colFileName = findColIdx(["tên file"], 14);
   
   for (var i = 7; i < data.length; i++) {
     var row = data[i];
-    if (row[0] && String(row[0]).trim() !== "") {
-      if (is15Col) {
-        tasks.push({
-          taskId: String(row[0]).trim(),
-          taskName: row[1] || "",
-          project: row[2] || "",
-          assignee: row[3] || "",
-          leader: row[4] || "",
-          deadline: row[5] || "",
-          priority: row[6] || "",
-          status: row[7] || "",
-          deliverable: row[8] || "",
-          trichYeu: row[9] || "",
-          soKyHieu: row[10] || "",
-          ngayBanHanh: row[11] || "",
-          aiSummary: row[12] || "",
-          submittedAt: row[13] || "",
-          fileName: row[14] || ""
-        });
-      } else {
-        // Cấu trúc cũ 13 cột
-        tasks.push({
-          taskId: String(row[0]).trim(),
-          taskName: row[1] || "",
-          project: "",
-          assignee: row[2] || "",
-          leader: "",
-          deadline: row[3] || "",
-          priority: row[4] || "",
-          status: row[5] || "",
-          deliverable: row[6] || "",
-          trichYeu: row[7] || "",
-          soKyHieu: row[8] || "",
-          ngayBanHanh: row[9] || "",
-          aiSummary: row[10] || "",
-          submittedAt: row[11] || "",
-          fileName: row[12] || ""
-        });
-      }
+    if (row[colTaskId] && String(row[colTaskId]).trim() !== "") {
+      tasks.push({
+        taskId: String(row[colTaskId]).trim(),
+        taskName: row[colTaskName] || "",
+        project: row[colProject] || "",
+        assignee: row[colAssignee] || "",
+        leader: row[colLeader] || "",
+        deadline: row[colDeadline] || "",
+        priority: row[colPriority] || "",
+        status: row[colStatus] || "",
+        deliverable: row[colDeliverable] || "",
+        trichYeu: row[colSummary] || "",
+        soKyHieu: row[colDocNum] || "",
+        ngayBanHanh: row[colDocDate] || "",
+        aiSummary: row[colAi] || "",
+        submittedAt: row[colSubmitted] || "",
+        fileName: row[colFileName] || ""
+      });
     }
   }
   
@@ -558,29 +593,25 @@ function forceFixMisalignedColumns() {
 }
 
 /**
- * HÀM KHÔI PHỤC VÀ ĐỒNG BỘ 100% DỮ LIỆU CHUẨN 15 CỘT (TỰ ĐỘNG TÁI TẠO SHEET SẠCH)
- * Giải quyết triệt để lỗi "This operation is not allowed on cells in typed columns" của Google Table!
- * Tạo sheet mới tinh, thuần túy dải ô chuẩn, gán Date Picker cho Cột F và Dropdown 4 màu cho Cột H!
+ * HÀM KHÔI PHỤC VÀ ĐỒNG BỘ 100% DỮ LIỆU CHUẨN 15 CỘT TRỰC TIẾP TRÊN SHEET HIỆN HÀNH (IN-PLACE)
+ * Bảo toàn tuyệt đối Sheet GID (735957328), không tạo thêm tab thừa.
+ * Cột F (Hạn hoàn thành): Date Picker yyyy-mm-dd
+ * Cột H (Trạng thái): Dropdown 4 trạng thái chuẩn
  */
 function repairAndRestoreAllTasksClean() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var oldSheet = ss.getSheetByName("Task_Tracker") || ss.getActiveSheet();
+  var sheet = ss.getSheetByName("Task_Tracker") || ss.getActiveSheet();
   
-  // 1. Tạo sheet mới hoàn toàn sạch (không dính Google Table Typed Columns)
-  var newSheet = ss.insertSheet("Task_Tracker_New");
-  ss.setActiveSheet(newSheet);
-  ss.moveActiveSheet(1);
-  
-  // 2. Tiêu đề hệ thống (Dòng 1-2)
-  newSheet.getRange("A1").setValue("HỆ THỐNG QUẢN LÝ TIẾN ĐỘ NHIỆM VỤ & NHẬN DIỆN NỘP FILE (ZALO BOT)")
+  // 1. Tiêu đề hệ thống (Dòng 1-2)
+  sheet.getRange("A1").setValue("HỆ THỐNG QUẢN LÝ TIẾN ĐỘ NHIỆM VỤ & NHẬN DIỆN NỘP FILE (ZALO BOT)")
     .setFontWeight("bold").setFontSize(14).setFontColor("#0F4C81");
-  newSheet.getRange("A2").setValue("Dữ liệu được cập nhật tự động qua Zalo Bot tích hợp AI Gemini / Claude - Sẵn sàng đồng bộ Google Sheets")
+  sheet.getRange("A2").setValue("Dữ liệu được cập nhật tự động qua Zalo Bot tích hợp AI Gemini / Claude - Sẵn sàng đồng bộ Google Sheets")
     .setFontStyle("italic").setFontSize(9).setFontColor("#5F6368");
   
-  // 3. Khóa cố định từ dòng 7 trở lên
-  newSheet.setFrozenRows(7);
+  // 2. Khóa cố định từ dòng 7 trở lên
+  sheet.setFrozenRows(7);
   
-  // 4. Độ rộng 15 cột chuẩn
+  // 3. Độ rộng 15 cột chuẩn
   var columnWidths = {
     1: 65,   // A: Task ID
     2: 260,  // B: Tên nhiệm vụ / Công việc
@@ -599,38 +630,46 @@ function repairAndRestoreAllTasksClean() {
     15: 200  // O: Tên file đã nộp
   };
   for (var col in columnWidths) {
-    newSheet.setColumnWidth(parseInt(col), columnWidths[col]);
+    sheet.setColumnWidth(parseInt(col), columnWidths[col]);
   }
   
-  // 5. Dashboard thống kê (Dòng 4-5)
-  newSheet.getRange("A4:C4").merge().setValue("TỔNG SỐ NHIỆM VỤ").setBackground("#E8F0FE").setFontColor("#174EA6").setFontWeight("bold").setHorizontalAlignment("center");
-  newSheet.getRange("A5:C5").merge().setFormula('=COUNTA(A8:A100)').setBackground("#E8F0FE").setFontColor("#174EA6").setFontSize(16).setFontWeight("bold").setHorizontalAlignment("center");
+  // 4. Dashboard thống kê (Dòng 4-5)
+  try {
+    sheet.getRange("A4:Z5").breakApart();
+  } catch (eBreak) {}
+  sheet.getRange("A4:C4").merge().setValue("TỔNG SỐ NHIỆM VỤ").setBackground("#E8F0FE").setFontColor("#174EA6").setFontWeight("bold").setHorizontalAlignment("center");
+  sheet.getRange("A5:C5").merge().setFormula('=COUNTA(A8:A100)').setBackground("#E8F0FE").setFontColor("#174EA6").setFontSize(16).setFontWeight("bold").setHorizontalAlignment("center");
 
-  newSheet.getRange("D4:F4").merge().setValue("CHƯA BẮT ĐẦU").setBackground("#F1F3F4").setFontColor("#5F6368").setFontWeight("bold").setHorizontalAlignment("center");
-  newSheet.getRange("D5:F5").merge().setFormula('=COUNTIF(H8:H100, "Chưa bắt đầu")').setBackground("#F1F3F4").setFontColor("#5F6368").setFontSize(16).setFontWeight("bold").setHorizontalAlignment("center");
+  sheet.getRange("D4:F4").merge().setValue("CHƯA BẮT ĐẦU").setBackground("#F1F3F4").setFontColor("#5F6368").setFontWeight("bold").setHorizontalAlignment("center");
+  sheet.getRange("D5:F5").merge().setFormula('=COUNTIF(H8:H100, "Chưa bắt đầu")').setBackground("#F1F3F4").setFontColor("#5F6368").setFontSize(16).setFontWeight("bold").setHorizontalAlignment("center");
 
-  newSheet.getRange("G4:I4").merge().setValue("ĐANG THỰC HIỆN").setBackground("#FEF7E0").setFontColor("#B06000").setFontWeight("bold").setHorizontalAlignment("center");
-  newSheet.getRange("G5:I5").merge().setFormula('=COUNTIF(H8:H100, "Đang thực hiện")').setBackground("#FEF7E0").setFontColor("#B06000").setFontSize(16).setFontWeight("bold").setHorizontalAlignment("center");
+  sheet.getRange("G4:I4").merge().setValue("ĐANG THỰC HIỆN").setBackground("#FEF7E0").setFontColor("#B06000").setFontWeight("bold").setHorizontalAlignment("center");
+  sheet.getRange("G5:I5").merge().setFormula('=COUNTIF(H8:H100, "Đang thực hiện")').setBackground("#FEF7E0").setFontColor("#B06000").setFontSize(16).setFontWeight("bold").setHorizontalAlignment("center");
 
-  newSheet.getRange("J4:L4").merge().setValue("ĐANG SỬA LẠI").setBackground("#FCE8E6").setFontColor("#C5221F").setFontWeight("bold").setHorizontalAlignment("center");
-  newSheet.getRange("J5:L5").merge().setFormula('=COUNTIF(H8:H100, "Đang sửa lại")').setBackground("#FCE8E6").setFontColor("#C5221F").setFontSize(16).setFontWeight("bold").setHorizontalAlignment("center");
+  sheet.getRange("J4:L4").merge().setValue("ĐANG SỬA LẠI").setBackground("#FCE8E6").setFontColor("#C5221F").setFontWeight("bold").setHorizontalAlignment("center");
+  sheet.getRange("J5:L5").merge().setFormula('=COUNTIF(H8:H100, "Đang sửa lại")').setBackground("#FCE8E6").setFontColor("#C5221F").setFontSize(16).setFontWeight("bold").setHorizontalAlignment("center");
 
-  newSheet.getRange("M4:O4").merge().setValue("ĐÃ HOÀN THÀNH").setBackground("#E6F4EA").setFontColor("#137333").setFontWeight("bold").setHorizontalAlignment("center");
-  newSheet.getRange("M5:O5").merge().setFormula('=COUNTIF(H8:H100, "Đã hoàn thành")').setBackground("#E6F4EA").setFontColor("#137333").setFontSize(16).setFontWeight("bold").setHorizontalAlignment("center");
+  sheet.getRange("M4:O4").merge().setValue("ĐÃ HOÀN THÀNH").setBackground("#E6F4EA").setFontColor("#137333").setFontWeight("bold").setHorizontalAlignment("center");
+  sheet.getRange("M5:O5").merge().setFormula('=COUNTIF(H8:H100, "Đã hoàn thành")').setBackground("#E6F4EA").setFontColor("#137333").setFontSize(16).setFontWeight("bold").setHorizontalAlignment("center");
 
-  newSheet.getRange("A4:O5").setBorder(true, true, true, true, true, true, "#DADCE0", SpreadsheetApp.BorderStyle.SOLID);
+  sheet.getRange("A4:O5").setBorder(true, true, true, true, true, true, "#DADCE0", SpreadsheetApp.BorderStyle.SOLID);
 
-  // 6. Header 15 cột (Dòng 7)
+  // 5. Header 15 cột (Dòng 7)
   var headers = [
     "Task ID", "Tên nhiệm vụ / Công việc", "Dự án", "Người phụ trách", "Lãnh đạo phòng",
     "Hạn hoàn thành", "Mức độ ưu tiên", "Trạng thái", "Sản phẩm", "Trích yếu (Yêu cầu / Dự kiến)",
     "Số ký hiệu văn bản", "Ngày ban hành", "Đánh giá AI (Tóm tắt file nộp)", "Thời gian nộp", "Tên file đã nộp"
   ];
-  var hRange = newSheet.getRange(7, 1, 1, headers.length);
+  var hRange = sheet.getRange(7, 1, 1, headers.length);
   hRange.setValues([headers]);
   hRange.setBackground("#0F4C81").setFontColor("#FFFFFF").setFontWeight("bold").setFontSize(10)
     .setHorizontalAlignment("center").setVerticalAlignment("middle");
-  newSheet.setRowHeight(7, 36);
+  sheet.setRowHeight(7, 36);
+
+  // 6. Xóa Data Validation cũ trên toàn bộ vùng dữ liệu để tránh xung đột
+  try {
+    sheet.getRange("A8:O100").clearDataValidations();
+  } catch (errClear) {}
 
   // 7. Nạp dữ liệu chuẩn 100% của 7 nhiệm vụ (Dòng 8 đến 14)
   var cleanTasksData = [
@@ -694,29 +733,39 @@ function repairAndRestoreAllTasksClean() {
     ]
   ];
 
-  newSheet.getRange(8, 1, cleanTasksData.length, 15).setValues(cleanTasksData);
+  sheet.getRange(8, 1, cleanTasksData.length, 15).setValues(cleanTasksData);
 
-  // 8. Cài đặt Data Validation sạch sẽ (KHÔNG CÒN BỊ TABLE CHẶN):
+  // 8. Cài đặt Data Validation sạch sẽ:
+  // Cột E (Lãnh đạo phòng)
+  var leaderList = ["Lê Hoàng", "Tô Thị Kim Thoa", "Nguyễn Thế Hòa"];
+  var leaderRule = SpreadsheetApp.newDataValidation().requireValueInList(leaderList, true).setAllowInvalid(true).build();
+  sheet.getRange("E8:E100").setDataValidation(leaderRule);
+
   // Cột F (Hạn hoàn thành): Date Picker thuần túy
-  var dateRule = SpreadsheetApp.newDataValidation()
-    .requireDate()
-    .setAllowInvalid(true)
-    .build();
-  newSheet.getRange("F8:F100").setDataValidation(dateRule);
+  var dateRule = SpreadsheetApp.newDataValidation().requireDate().setAllowInvalid(true).build();
+  sheet.getRange("F8:F100").setDataValidation(dateRule);
+  sheet.getRange("F8:F100").setNumberFormat("yyyy-mm-dd");
+
+  // Cột G (Mức độ ưu tiên): Dropdown
+  var prioList = ["Bình thường", "Gấp", "Hỏa tốc"];
+  var prioRule = SpreadsheetApp.newDataValidation().requireValueInList(prioList, true).setAllowInvalid(true).build();
+  sheet.getRange("G8:G100").setDataValidation(prioRule);
 
   // Cột H (Trạng thái): Dropdown 4 trạng thái chuẩn có mũi tên ▼ ở mọi dòng
   var statusList = ["Chưa bắt đầu", "Đang thực hiện", "Đang sửa lại", "Đã hoàn thành"];
-  var statusRule = SpreadsheetApp.newDataValidation()
-    .requireValueInList(statusList, true)
-    .setAllowInvalid(false)
-    .build();
-  newSheet.getRange("H8:H100").setDataValidation(statusRule);
+  var statusRule = SpreadsheetApp.newDataValidation().requireValueInList(statusList, true).setAllowInvalid(false).build();
+  sheet.getRange("H8:H100").setDataValidation(statusRule);
+
+  // Cột I (Sản phẩm)
+  var prodList = ["Công văn", "Tờ trình", "Báo cáo", "Kết luận", "Phiếu trình", "Kế hoạch", "Thông báo", "Quyết định"];
+  var prodRule = SpreadsheetApp.newDataValidation().requireValueInList(prodList, true).setAllowInvalid(true).build();
+  sheet.getRange("I8:I100").setDataValidation(prodRule);
 
   // 9. Tô màu trực quan cho trạng thái từng dòng
   for (var r = 0; r < cleanTasksData.length; r++) {
     var rowNum = 8 + r;
     var st = cleanTasksData[r][7];
-    var cell = newSheet.getRange(rowNum, 8);
+    var cell = sheet.getRange(rowNum, 8);
     if (st === "Đã hoàn thành") {
       cell.setBackground("#E6F4EA").setFontColor("#137333").setFontWeight("bold");
     } else if (st === "Đang thực hiện") {
@@ -727,28 +776,21 @@ function repairAndRestoreAllTasksClean() {
   }
 
   // 10. Đóng khung, canh lề chuẩn
-  var dRange = newSheet.getRange("A8:O100");
+  var dRange = sheet.getRange("A8:O100");
   dRange.setBorder(true, true, true, true, true, true, "#DADCE0", SpreadsheetApp.BorderStyle.SOLID);
   dRange.setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
   dRange.setVerticalAlignment("middle");
   dRange.setFontSize(10);
 
-  newSheet.getRange("A8:A100").setHorizontalAlignment("center");
-  newSheet.getRange("E8:G100").setHorizontalAlignment("center");
-  newSheet.getRange("H8:I100").setHorizontalAlignment("center");
-  newSheet.getRange("K8:L100").setHorizontalAlignment("center");
-  newSheet.getRange("N8:N100").setHorizontalAlignment("center");
+  sheet.getRange("A8:A100").setHorizontalAlignment("center");
+  sheet.getRange("E8:G100").setHorizontalAlignment("center");
+  sheet.getRange("H8:I100").setHorizontalAlignment("center");
+  sheet.getRange("K8:L100").setHorizontalAlignment("center");
+  sheet.getRange("N8:N100").setHorizontalAlignment("center");
 
-  // 11. Đổi tên sheet cũ thành Task_Tracker_Backup và newSheet thành Task_Tracker chính thức
+  SpreadsheetApp.flush();
   try {
-    if (oldSheet && oldSheet.getName() === "Task_Tracker") {
-      oldSheet.setName("Task_Tracker_Backup");
-    }
-  } catch (eRen) {}
-  newSheet.setName("Task_Tracker");
-
-  try {
-    SpreadsheetApp.getUi().alert("🎉 ĐÃ KHÔI PHỤC VÀ TÁI TẠO BẢNG TÍNH MỚI 100% THÀNH CÔNG!\nCột F đã là Date Picker chuẩn.\nCột H đã có Dropdown 4 trạng thái hoàn hảo!");
+    SpreadsheetApp.getUi().alert("🎉 ĐÃ KHÔI PHỤC VÀ ĐỒNG BỘ 15 CỘT THÀNH CÔNG!\nCột F (Hạn hoàn thành): Date Picker yyyy-mm-dd\nCột H (Trạng thái): Dropdown 4 trạng thái chuẩn.");
   } catch (e) {
     Logger.log("Restored successfully!");
   }
