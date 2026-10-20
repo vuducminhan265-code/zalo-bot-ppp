@@ -12,10 +12,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 SHEET_ID = "1RRb0PJB2EJv92SPHZ3_ahv2YYEn9bxjfC8JBPpTkuG4"
-SHEET_GID = "735957328"
 DEFAULT_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycby2MGloAdgCZYFZ6QkEmfVBMnIOWZ7ZdTZqREIHKLurjbSCB66ohuLnBoReUq4MWvc/exec"
 WEBHOOK_URL = os.getenv("GOOGLE_SHEETS_WEBHOOK_URL") or DEFAULT_WEBHOOK_URL
-CSV_EXPORT_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={SHEET_GID}"
+# Tự động xuất CSV trực tiếp từ trang tính Task_Tracker chính thức (không phụ thuộc GID tĩnh tránh lỗi 400 khi đổi tab)
+CSV_EXPORT_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
 
 session = requests.Session()
 
@@ -25,10 +25,11 @@ class TaskManager:
         self.webhook_url = webhook_url or WEBHOOK_URL or DEFAULT_WEBHOOK_URL
 
     def get_all_tasks_from_sheet(self) -> list:
-        """Đọc tức thì dữ liệu từ Google Sheets, tự động thích ứng cấu trúc 13 cột hoặc 15 cột."""
+        """Đọc tức thì dữ liệu từ Google Sheets thời gian thực, tự động thích ứng cấu trúc 13 cột hoặc 15 cột."""
+        # 1. Thử tải trực tiếp CSV từ Google Sheets (tốc độ cao và dữ liệu mới nhất)
         try:
             req = urllib.request.Request(CSV_EXPORT_URL, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=10) as resp:
+            with urllib.request.urlopen(req, timeout=12) as resp:
                 content = resp.read().decode("utf-8")
                 reader = csv.reader(io.StringIO(content))
                 rows = list(reader)
@@ -42,11 +43,7 @@ class TaskManager:
                         row = rows[i]
                         if len(row) > 0 and row[0].strip():
                             if has_project_col:
-                                # Cấu trúc mới 15 cột:
-                                # 0: Task ID | 1: Tên nhiệm vụ | 2: Dự án | 3: Người phụ trách | 4: Lãnh đạo phòng
-                                # 5: Hạn hoàn thành | 6: Mức độ ưu tiên | 7: Trạng thái | 8: Sản phẩm
-                                # 9: Trích yếu | 10: Số ký hiệu | 11: Ngày ban hành | 12: Đánh giá AI
-                                # 13: Thời gian nộp | 14: Tên file
+                                # Cấu trúc 15 cột chuẩn
                                 tasks.append({
                                     "taskId": row[0].strip(),
                                     "taskName": row[1].strip() if len(row) > 1 else "",
@@ -65,10 +62,7 @@ class TaskManager:
                                     "fileName": row[14].strip() if len(row) > 14 else ""
                                 })
                             else:
-                                # Cấu trúc cũ 13 cột:
-                                # 0: Task ID | 1: Tên nhiệm vụ | 2: Người phụ trách | 3: Hạn hoàn thành
-                                # 4: Mức độ ưu tiên | 5: Trạng thái | 6: Sản phẩm | 7: Trích yếu
-                                # 8: Số ký hiệu | 9: Ngày ban hành | 10: Đánh giá AI | 11: Thời gian nộp | 12: Tên file
+                                # Cấu trúc 13 cột cũ
                                 tasks.append({
                                     "taskId": row[0].strip(),
                                     "taskName": row[1].strip() if len(row) > 1 else "",
@@ -86,10 +80,24 @@ class TaskManager:
                                     "submittedAt": row[11].strip() if len(row) > 11 else "",
                                     "fileName": row[12].strip() if len(row) > 12 else ""
                                 })
-                return tasks
-        except Exception as e:
-            sys.stderr.write(f"[CẢNH BÁO] Không thể đọc Google Sheets: {e}. Chuyển sang đọc file local.\n")
+                if tasks:
+                    return tasks
+        except Exception as e_csv:
+            sys.stderr.write(f"[WARN] Tải CSV Google Sheets lỗi: {e_csv}. Đang thử qua Webhook doGet...\n")
+
+        # 2. Fallback thứ 2: Đọc qua Google Apps Script Webhook doGet
+        webhook_url = self.webhook_url or os.getenv("GOOGLE_SHEETS_WEBHOOK_URL") or DEFAULT_WEBHOOK_URL
+        if webhook_url:
+            try:
+                res = requests.get(webhook_url, timeout=12)
+                if res.status_code == 200:
+                    data = res.json()
+                    if data.get("success") and data.get("data"):
+                        return data["data"]
+            except Exception as e_hook:
+                sys.stderr.write(f"[WARN] Đọc qua Webhook doGet thất bại: {e_hook}.\n")
         
+        # 3. Fallback cuối cùng: File Excel lưu đệm
         return self._get_all_tasks_from_local_excel()
 
     def get_grouped_pending_tasks(self) -> dict:
