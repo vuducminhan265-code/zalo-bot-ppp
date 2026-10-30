@@ -526,10 +526,24 @@ function doGet(e) {
  * TỰ ĐỘNG PHÁT BẢN TIN NHẮC VIỆC LÊN ZALO GROUP HÀNG NGÀY (07:45 SÁNG & 17:30 CHIỀU)
  * Chạy 100% trên Đám mây Google Apps Script - Không cần bật máy tính.
  */
+function keepRenderAlive() {
+  try {
+    UrlFetchApp.fetch("https://zalo-bot-ppp-service.onrender.com/", { "muteHttpExceptions": true });
+  } catch (e) {}
+}
+
 function sendDailyZaloMorningReminder() {
   var renderServiceUrl = "https://zalo-bot-ppp-service.onrender.com/api/cron/morning";
   try {
-    UrlFetchApp.fetch(renderServiceUrl, { "muteHttpExceptions": true });
+    // 1. Warm-up ping trước để đánh thức Render nếu đang ngủ đông
+    keepRenderAlive();
+    Utilities.sleep(2000);
+    // 2. Kích hoạt phát bản tin nhắc việc 07:45 sáng
+    var resp = UrlFetchApp.fetch(renderServiceUrl, { "muteHttpExceptions": true });
+    Logger.log("Morning reminder status: " + resp.getResponseCode() + " | " + resp.getContentText());
+    try {
+      SpreadsheetApp.getActiveSpreadsheet().toast("✅ Đã phát Bản tin nhắc việc sáng tới Zalo Group!", "Thông báo Zalo Bot", 5);
+    } catch (eToast) {}
   } catch (err) {
     Logger.log("Trigger error: " + err);
   }
@@ -538,7 +552,15 @@ function sendDailyZaloMorningReminder() {
 function sendDailyZaloEveningSummary() {
   var renderServiceUrl = "https://zalo-bot-ppp-service.onrender.com/api/cron/evening";
   try {
-    UrlFetchApp.fetch(renderServiceUrl, { "muteHttpExceptions": true });
+    // 1. Warm-up ping trước
+    keepRenderAlive();
+    Utilities.sleep(2000);
+    // 2. Kích hoạt phát bản tin tổng kết 17:30 chiều
+    var resp = UrlFetchApp.fetch(renderServiceUrl, { "muteHttpExceptions": true });
+    Logger.log("Evening summary status: " + resp.getResponseCode() + " | " + resp.getContentText());
+    try {
+      SpreadsheetApp.getActiveSpreadsheet().toast("✅ Đã phát Bản tin tổng kết cuối ngày tới Zalo Group!", "Thông báo Zalo Bot", 5);
+    } catch (eToast) {}
   } catch (err) {
     Logger.log("Trigger error: " + err);
   }
@@ -551,7 +573,7 @@ function createDailyTriggers() {
     ScriptApp.deleteTrigger(triggers[i]);
   }
   
-  // 1. Kích hoạt Trigger 07:45 Sáng (Bản tin nhắc việc & tiến độ)
+  // 1. Kích hoạt Trigger 07:45 Sáng (Bản tin nhắc việc & tiến độ đầu ngày)
   ScriptApp.newTrigger("sendDailyZaloMorningReminder")
     .timeBased()
     .atHour(7)
@@ -560,7 +582,7 @@ function createDailyTriggers() {
     .inTimezone("Asia/Ho_Chi_Minh")
     .create();
 
-  // 2. Kích hoạt Trigger 17:30 Chiều (Bản tin tổng kết cuối ngày)
+  // 2. Kích hoạt Trigger 17:30 Chiều (Bản tin tổng kết sản phẩm cuối ngày)
   ScriptApp.newTrigger("sendDailyZaloEveningSummary")
     .timeBased()
     .atHour(17)
@@ -568,8 +590,17 @@ function createDailyTriggers() {
     .everyDays(1)
     .inTimezone("Asia/Ho_Chi_Minh")
     .create();
+
+  // 3. Kích hoạt Trigger Keep-Alive định kỳ mỗi 10 phút (giữ Render chạy 24/7)
+  ScriptApp.newTrigger("keepRenderAlive")
+    .timeBased()
+    .everyMinutes(10)
+    .create();
     
-  Logger.log("✅ Đã kích hoạt Trigger tự động phát bản tin 07:45 & 17:30 hàng ngày thành công!");
+  Logger.log("✅ Đã kích hoạt Trigger tự động phát bản tin 07:45 & 17:30 và Keep-Alive 10 phút thành công!");
+  try {
+    SpreadsheetApp.getUi().alert("⏰ ĐÃ KÍCH HOẠT TỰ ĐỘNG NHẮC VIỆC THÀNH CÔNG!\n\n• 07:45 Sáng: Tự động phát Bản tin nhắc việc & tiến độ đầu ngày\n• 17:30 Chiều: Tự động phát Bản tin tổng kết sản phẩm cuối ngày\n• Định kỳ 10 phút: Tự động duy trì Render Web Service chạy 24/7 không bị ngủ đông.");
+  } catch (eAlert) {}
 }
 
 /**
@@ -580,6 +611,8 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu("⚡ QUẢN LÝ NHIỆM VỤ")
     .addItem("🎯 ĐỒNG BỘ & KHÔI PHỤC BẢNG 15 CỘT (CHỨC NĂNG CHÍNH)", "repairAndRestoreAllTasksClean")
+    .addItem("⏰ KÍCH HOẠT TỰ ĐỘNG NHẮC VIỆC (07:45 & 17:30 HÀNG NGÀY)", "createDailyTriggers")
+    .addItem("📢 PHÁT BẢN TIN NHẮC VIỆC NGAY BÂY GIỜ (TEST THỰC TẾ)", "sendDailyZaloMorningReminder")
     .addToUi();
 }
 
@@ -795,6 +828,11 @@ function repairAndRestoreAllTasksClean() {
   sheet.getRange("H8:I100").setHorizontalAlignment("center");
   sheet.getRange("K8:L100").setHorizontalAlignment("center");
   sheet.getRange("N8:N100").setHorizontalAlignment("center");
+
+  // Tự động kích hoạt toàn bộ Triggers nhắc việc (07:45 & 17:30 & Keep-Alive 10 phút)
+  try {
+    createDailyTriggers();
+  } catch (eTrig) {}
 
   SpreadsheetApp.flush();
   try {

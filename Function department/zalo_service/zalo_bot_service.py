@@ -71,6 +71,43 @@ except Exception as e:
     def generate_reminder_message():
         return f"⚠️ Lỗi đọc Google Sheets: {e}"
 
+# Quản lý danh sách các Group và Chat ID hoạt động để phát bản tin nhắc việc
+DEFAULT_GROUP_CHAT_ID = "zgr-77d54cd584b96de734a8"  # Nhóm Zalo chính thức Phòng PPP&QLN
+ACTIVE_CHATS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "database", "active_chats.json")
+KNOWN_TARGET_CHATS = set([DEFAULT_GROUP_CHAT_ID])
+
+def load_known_target_chats():
+    global KNOWN_TARGET_CHATS
+    env_g = os.getenv("TARGET_GROUP_ID") or os.getenv("DEFAULT_ZALO_CHAT_ID") or os.getenv("ZALO_GROUP_CHAT_ID")
+    if env_g and str(env_g).strip() != "2327925421752384731":
+        KNOWN_TARGET_CHATS.add(str(env_g).strip())
+    KNOWN_TARGET_CHATS.add(DEFAULT_GROUP_CHAT_ID)
+    try:
+        if os.path.exists(ACTIVE_CHATS_FILE):
+            with open(ACTIVE_CHATS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    for cid in data:
+                        if cid and str(cid).strip() != "2327925421752384731":
+                            KNOWN_TARGET_CHATS.add(str(cid).strip())
+    except Exception as e:
+        print(f"Error reading active_chats.json: {e}", flush=True)
+    return list(KNOWN_TARGET_CHATS)
+
+def record_active_chat(chat_id: str):
+    global KNOWN_TARGET_CHATS
+    str_cid = str(chat_id).strip()
+    if not str_cid or str_cid == "2327925421752384731":
+        return
+    if str_cid not in KNOWN_TARGET_CHATS:
+        KNOWN_TARGET_CHATS.add(str_cid)
+        try:
+            os.makedirs(os.path.dirname(ACTIVE_CHATS_FILE), exist_ok=True)
+            with open(ACTIVE_CHATS_FILE, "w", encoding="utf-8") as f:
+                json.dump(list(KNOWN_TARGET_CHATS), f, ensure_ascii=False)
+        except Exception as e:
+            print(f"Error saving active_chats.json: {e}", flush=True)
+
 # Quản lý bộ nhớ ngữ cảnh hội thoại theo từng cuộc trò chuyện (chat_id)
 CHAT_HISTORIES = {}
 MAX_HISTORY_PER_CHAT = 12
@@ -343,6 +380,9 @@ def smart_split_zalo_message(text: str, max_len: int = 1400) -> list:
 
 def send_zalo_message(chat_id: str, text: str, bot_key: str = "bot1"):
     """Gửi tin nhắn phản hồi qua Zalo Bot API tương ứng với bot_key."""
+    target_id = str(chat_id).strip()
+    if target_id == "2327925421752384731":
+        target_id = DEFAULT_GROUP_CHAT_ID
     bot_cfg = BOTS.get(bot_key, BOTS["bot1"])
     base_url = bot_cfg["base_url"]
     clean_text = sanitize_zalo_text(text)
@@ -351,15 +391,18 @@ def send_zalo_message(chat_id: str, text: str, bot_key: str = "bot1"):
         chunks = smart_split_zalo_message(clean_text, max_len=1400)
         for chunk in chunks:
             payload = {
-                "chat_id": str(chat_id),
+                "chat_id": target_id,
                 "text": chunk
             }
-            resp = requests.post(url, json=payload, timeout=10)
+            resp = requests.post(url, json=payload, timeout=12)
             res_json = resp.json()
-            print(f"[{datetime.now().strftime('%H:%M:%S')}][{bot_key.upper()}] Sent to {chat_id} -> Status: {res_json.get('ok')}", flush=True)
+            if res_json.get("ok"):
+                log_event(f"[{bot_key.upper()}] ✅ Đã gửi tin nhắn tới {target_id} thành công.")
+            else:
+                log_event(f"[{bot_key.upper()}] ❌ Lỗi gửi tin nhắn tới {target_id}: {res_json}")
             time.sleep(0.3)
     except Exception as e:
-        print(f"Error sending message on {bot_key}: {e}", flush=True)
+        log_event(f"[{bot_key.upper()}] ❌ Exception khi gửi tin nhắn tới {target_id}: {e}")
 
 def download_zalo_file(file_id: str = None, file_name: str = None, direct_url: str = None, bot_key: str = "bot1") -> str:
     """Tải tệp đính kèm gửi qua Zalo Bot về thư mục tạm với TÊN GỐC CHUẨN XÁC để nhận diện Task ID."""
@@ -569,6 +612,8 @@ def process_message(msg_obj: dict, bot_key: str = "bot1"):
     if not chat_id:
         log_event(f"⚠️ [{bot_key.upper()}] Bỏ qua message không có chat_id: {msg_obj}")
         return
+
+    record_active_chat(chat_id)
 
     # 0. Bóc tách TOÀN BỘ các tệp đính kèm trong tin nhắn (hỗ trợ nhiều ảnh gửi cùng lúc)
     all_attachments = extract_all_attachments(msg_obj)
@@ -1055,11 +1100,14 @@ def run_http_health_server():
                 def run_m():
                     try:
                         rep, g = task_fetcher.generate_reminder_parts()
-                        send_zalo_message("2327925421752384731", rep, bot_key="bot1")
-                        time.sleep(0.5)
-                        send_zalo_message("2327925421752384731", g, bot_key="bot1")
+                        chats = load_known_target_chats()
+                        for c_id in chats:
+                            send_zalo_message(c_id, rep, bot_key="bot1")
+                            time.sleep(0.5)
+                            send_zalo_message(c_id, g, bot_key="bot1")
+                        log_event(f"[CRON MORNING] ✅ Đã hoàn tất phát bản tin nhắc việc sáng tới {len(chats)} cuộc trò chuyện ({chats})")
                     except Exception as e:
-                        print(f"Manual morning trigger error: {e}")
+                        log_event(f"⚠️ [API CRON Morning Error]: {e}")
                 threading.Thread(target=run_m, daemon=True).start()
                 self.wfile.write(json.dumps({"success": True, "message": "Triggered 07:45 morning reminder"}).encode("utf-8"))
                 return
@@ -1071,9 +1119,12 @@ def run_http_health_server():
                 def run_e():
                     try:
                         eve = task_fetcher.generate_evening_review_summary()
-                        send_zalo_message("2327925421752384731", eve, bot_key="bot1")
+                        chats = load_known_target_chats()
+                        for c_id in chats:
+                            send_zalo_message(c_id, eve, bot_key="bot1")
+                        log_event(f"[CRON EVENING] ✅ Đã hoàn tất phát bản tin tổng kết chiều tới {len(chats)} cuộc trò chuyện ({chats})")
                     except Exception as e:
-                        print(f"Manual evening trigger error: {e}")
+                        log_event(f"⚠️ [API CRON Evening Error]: {e}")
                 threading.Thread(target=run_e, daemon=True).start()
                 self.wfile.write(json.dumps({"success": True, "message": "Triggered 17:30 evening summary"}).encode("utf-8"))
                 return
@@ -1133,16 +1184,11 @@ def daily_cron_scheduler():
             hour = now_vn.hour
             minute = now_vn.minute
             
-            target_chats = set()
-            target_chats.add("2327925421752384731")  # Group Zalo chính thức Phòng PPP&QLN
-            
-            env_chat = os.getenv("DEFAULT_ZALO_CHAT_ID") or os.getenv("ZALO_GROUP_CHAT_ID")
-            if env_chat:
-                target_chats.add(str(env_chat).strip())
-                
+            target_chats = set(load_known_target_chats())
             with USER_IMAGE_LOCK:
                 for c_id in RECENT_USER_TEXTS.keys():
-                    target_chats.add(str(c_id))
+                    if str(c_id).strip() != "2327925421752384731":
+                        target_chats.add(str(c_id).strip())
 
             # 1. Phát bản tin 07:45 sáng
             if hour == 7 and minute == 45 and last_morning_sent != today_str:
