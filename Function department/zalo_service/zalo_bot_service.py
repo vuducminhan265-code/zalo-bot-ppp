@@ -73,8 +73,9 @@ except Exception as e:
 
 # Quản lý danh sách các Group và Chat ID hoạt động để phát bản tin nhắc việc
 DEFAULT_GROUP_CHAT_ID = "zgr-77d54cd584b96de734a8"  # Nhóm Zalo chính thức Phòng PPP&QLN
+AN_PERSONAL_CHAT_ID = "96db830ddb45321b6b54"        # Khung chat riêng với Chuyên viên An (Admin)
 ACTIVE_CHATS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "database", "active_chats.json")
-KNOWN_TARGET_CHATS = set([DEFAULT_GROUP_CHAT_ID])
+KNOWN_TARGET_CHATS = set([DEFAULT_GROUP_CHAT_ID, AN_PERSONAL_CHAT_ID])
 
 def load_known_target_chats():
     global KNOWN_TARGET_CHATS
@@ -82,6 +83,7 @@ def load_known_target_chats():
     if env_g and str(env_g).strip() != "2327925421752384731":
         KNOWN_TARGET_CHATS.add(str(env_g).strip())
     KNOWN_TARGET_CHATS.add(DEFAULT_GROUP_CHAT_ID)
+    KNOWN_TARGET_CHATS.add(AN_PERSONAL_CHAT_ID)
     try:
         if os.path.exists(ACTIVE_CHATS_FILE):
             with open(ACTIVE_CHATS_FILE, "r", encoding="utf-8") as f:
